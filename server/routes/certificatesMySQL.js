@@ -1,6 +1,7 @@
 const express = require('express');
 const Joi = require('joi');
 const CertificateMySQL = require('../models/CertificateMySQL');
+const { authenticateToken, optionalAuth, requireAdmin, requireVerified } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -11,6 +12,8 @@ const certificateSchema = Joi.object({
   refNo: Joi.string().min(1).max(50).required(),
   issueDate: Joi.date().optional(),
   certificateType: Joi.string().valid('student', 'trainer').default('student'),
+  userId: Joi.number().integer().optional(), // For admin to assign to specific user
+  recipientEmail: Joi.string().email().optional(), // For issuing to non-registered users
   // Student-specific fields
   trainingDuration: Joi.string().max(50).optional(),
   subjectCourse: Joi.string().max(200).optional(),
@@ -26,8 +29,8 @@ const verificationSchema = Joi.object({
   dofNo: Joi.string().required()
 });
 
-// POST /api/mysql/certificates - Generate new certificate
-router.post('/', async (req, res) => {
+// POST /api/mysql/certificates - Generate new certificate (Admin only)
+router.post('/', authenticateToken, requireAdmin, async (req, res) => {
   try {
     // Validate request body
     const { error, value } = certificateSchema.validate(req.body);
@@ -45,6 +48,10 @@ router.post('/', async (req, res) => {
         error: 'Certificate with this reference number already exists' 
       });
     }
+
+    // Add issuer information
+    value.issuedBy = req.user.id;
+    value.issuerName = `${req.user.firstName} ${req.user.lastName}`;
 
     // Create certificate
     const certificate = await CertificateMySQL.create(value);
@@ -64,8 +71,8 @@ router.post('/', async (req, res) => {
   }
 });
 
-// GET /api/mysql/certificates/verify/:dofNo - Verify certificate
-router.get('/verify/:dofNo', async (req, res) => {
+// GET /api/mysql/certificates/verify/:dofNo - Verify certificate (Public access)
+router.get('/verify/:dofNo', optionalAuth, async (req, res) => {
   try {
     const { dofNo } = req.params;
 
@@ -99,14 +106,22 @@ router.get('/verify/:dofNo', async (req, res) => {
   }
 });
 
-// GET /api/mysql/certificates/:id - Get certificate by ID
-router.get('/:id', async (req, res) => {
+// GET /api/mysql/certificates/:id - Get certificate by ID (Authenticated users only)
+router.get('/:id', authenticateToken, async (req, res) => {
   try {
     const certificate = await CertificateMySQL.findById(req.params.id);
     
     if (!certificate) {
       return res.status(404).json({ 
         error: 'Certificate not found' 
+      });
+    }
+
+    // Check if user can access this certificate
+    if (req.user.role !== 'admin' && certificate.user_id !== req.user.id) {
+      return res.status(403).json({
+        error: 'Access denied',
+        message: 'You can only view your own certificates'
       });
     }
 
@@ -124,8 +139,8 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// GET /api/mysql/certificates - Get all certificates (with pagination and search)
-router.get('/', async (req, res) => {
+// GET /api/mysql/certificates - Get all certificates (Admin only) or user's certificates
+router.get('/', authenticateToken, async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
@@ -133,10 +148,20 @@ router.get('/', async (req, res) => {
 
     let result;
     
-    if (search) {
-      result = await CertificateMySQL.search(search, page, limit);
+    if (req.user.role === 'admin') {
+      // Admin can see all certificates
+      if (search) {
+        result = await CertificateMySQL.search(search, page, limit);
+      } else {
+        result = await CertificateMySQL.findAll(page, limit);
+      }
     } else {
-      result = await CertificateMySQL.findAll(page, limit);
+      // Regular users can only see their own certificates
+      if (search) {
+        result = await CertificateMySQL.searchByUser(req.user.id, search, page, limit);
+      } else {
+        result = await CertificateMySQL.findByUser(req.user.id, page, limit);
+      }
     }
 
     res.status(200).json({
@@ -153,8 +178,8 @@ router.get('/', async (req, res) => {
   }
 });
 
-// DELETE /api/mysql/certificates/:id - Deactivate certificate
-router.delete('/:id', async (req, res) => {
+// DELETE /api/mysql/certificates/:id - Deactivate certificate (Admin only)
+router.delete('/:id', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const certificate = await CertificateMySQL.findById(req.params.id);
     
@@ -177,8 +202,8 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
-// GET /api/mysql/certificates/stats/:dofNo - Get verification statistics
-router.get('/stats/:dofNo', async (req, res) => {
+// GET /api/mysql/certificates/stats/:dofNo - Get verification statistics (Admin only)
+router.get('/stats/:dofNo', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const { dofNo } = req.params;
     

@@ -11,6 +11,10 @@ const { testConnection: testMySQLConnection } = require('./config/database');
 // Import routes
 const certificateRoutes = require('./routes/certificates');
 const certificateMySQLRoutes = require('./routes/certificatesMySQL');
+const authRoutes = require('./routes/auth');
+const userRoutes = require('./routes/users');
+const claimRoutes = require('./routes/claims');
+const adminRoutes = require('./routes/admin');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -48,6 +52,10 @@ testMySQLConnection();
 // Routes
 app.use('/api/certificates', certificateRoutes); // MongoDB routes
 app.use('/api/mysql/certificates', certificateMySQLRoutes); // MySQL routes
+app.use('/api/auth', authRoutes); // Authentication routes
+app.use('/api/users', userRoutes); // User profile routes
+app.use('/api/claims', claimRoutes); // Certificate claiming routes
+app.use('/api/admin', adminRoutes); // Admin management routes
 
 // Health check endpoint
 app.get('/api/health', async (req, res) => {

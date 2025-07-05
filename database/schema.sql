@@ -1,20 +1,90 @@
--- Certificate Generation & Verification System
--- MySQL Database Schema
+-- CertifyPro - Digital Certificate Platform
+-- Enhanced MySQL Database Schema with Authentication
 -- Created: 2025-07-06
 
 -- Create database
-CREATE DATABASE IF NOT EXISTS certificate_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-USE certificate_db;
+CREATE DATABASE IF NOT EXISTS certifypro_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+USE certifypro_db;
 
--- Create certificates table
+-- Create users table
+CREATE TABLE users (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    email VARCHAR(255) NOT NULL UNIQUE,
+    password_hash VARCHAR(255) NULL, -- NULL for OAuth users
+    first_name VARCHAR(100) NOT NULL,
+    last_name VARCHAR(100) NOT NULL,
+    secondary_email VARCHAR(255) NULL,
+    phone_number VARCHAR(20) NULL,
+    gender ENUM('male', 'female', 'other', 'prefer_not_to_say') NULL,
+    date_of_birth DATE NULL,
+    profile_picture VARCHAR(500) NULL,
+    bio TEXT NULL,
+    role ENUM('admin', 'user') NOT NULL DEFAULT 'user',
+    
+    -- OAuth fields
+    google_id VARCHAR(255) NULL UNIQUE,
+    oauth_provider ENUM('local', 'google') DEFAULT 'local',
+    
+    -- Account status
+    is_verified BOOLEAN DEFAULT FALSE,
+    is_active BOOLEAN DEFAULT TRUE,
+    email_verified_at TIMESTAMP NULL,
+    last_login_at TIMESTAMP NULL,
+    
+    -- Profile completion
+    profile_completed BOOLEAN DEFAULT FALSE,
+    
+    -- Timestamps
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    
+    -- Indexes
+    INDEX idx_email (email),
+    INDEX idx_google_id (google_id),
+    INDEX idx_role (role),
+    INDEX idx_is_active (is_active)
+);
+
+-- Create organizations table (for future use)
+CREATE TABLE organizations (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(200) NOT NULL,
+    slug VARCHAR(200) NOT NULL UNIQUE,
+    description TEXT,
+    website VARCHAR(500),
+    logo_url VARCHAR(500),
+    admin_user_id INT NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    
+    FOREIGN KEY (admin_user_id) REFERENCES users(id),
+    INDEX idx_slug (slug),
+    INDEX idx_is_active (is_active)
+);
+
+-- Enhanced certificates table
 CREATE TABLE certificates (
     id INT AUTO_INCREMENT PRIMARY KEY,
     ref_no VARCHAR(50) NOT NULL UNIQUE,
     dof_no VARCHAR(100) NOT NULL UNIQUE,
-    name VARCHAR(100) NOT NULL,
+    
+    -- Recipient information
+    recipient_user_id INT NULL, -- Links to users table when user claims certificate
+    recipient_email VARCHAR(255) NOT NULL, -- Always store email even if no account
+    recipient_name VARCHAR(200) NOT NULL,
+    
+    -- Certificate details
+    title VARCHAR(200) NOT NULL, -- Certificate title
     program VARCHAR(200) NOT NULL,
-    certificate_type ENUM('student', 'trainer') NOT NULL DEFAULT 'student',
+    description TEXT NULL,
+    certificate_type ENUM('student', 'trainer', 'completion', 'achievement', 'participation') NOT NULL DEFAULT 'student',
     issue_date DATE NOT NULL,
+    expiry_date DATE NULL,
+    
+    -- Issuer information
+    issued_by_user_id INT NOT NULL, -- Admin who issued
+    issued_by_org_id INT NULL, -- Organization (optional)
     
     -- Student-specific fields
     training_duration VARCHAR(50) NULL,
@@ -22,97 +92,266 @@ CREATE TABLE certificates (
     start_date DATE NULL,
     end_date DATE NULL,
     gpa DECIMAL(3,2) NULL,
+    grade VARCHAR(10) NULL,
     
-    -- Trainer-specific fields (for future implementation)
+    -- Trainer-specific fields
     specialization VARCHAR(200) NULL,
     experience_years INT NULL,
+    
+    -- Certificate design and content
+    template_id INT NULL,
+    custom_fields JSON NULL, -- Store additional custom data
     
     -- QR Code and verification
     qr_code_data TEXT NOT NULL,
     verification_url VARCHAR(500) NOT NULL,
     
+    -- Sharing and privacy
+    is_public BOOLEAN DEFAULT TRUE, -- Can be viewed publicly
+    is_shareable BOOLEAN DEFAULT TRUE, -- Can be shared by recipient
+    share_token VARCHAR(100) NULL UNIQUE, -- For public sharing
+    
     -- Status and metadata
-    is_active BOOLEAN DEFAULT TRUE,
-    generated_by VARCHAR(100) DEFAULT 'system',
+    status ENUM('draft', 'issued', 'revoked', 'expired') DEFAULT 'issued',
     verification_count INT DEFAULT 0,
     last_verified DATETIME NULL,
+    
+    -- Skills and tags
+    skills JSON NULL, -- Array of skills
+    tags JSON NULL, -- Array of tags
     
     -- Timestamps
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     
+    -- Foreign keys
+    FOREIGN KEY (recipient_user_id) REFERENCES users(id) ON DELETE SET NULL,
+    FOREIGN KEY (issued_by_user_id) REFERENCES users(id),
+    FOREIGN KEY (issued_by_org_id) REFERENCES organizations(id) ON DELETE SET NULL,
+    
     -- Indexes for better performance
     INDEX idx_dof_no (dof_no),
     INDEX idx_ref_no (ref_no),
-    INDEX idx_name (name),
+    INDEX idx_recipient_user_id (recipient_user_id),
+    INDEX idx_recipient_email (recipient_email),
+    INDEX idx_issued_by_user_id (issued_by_user_id),
     INDEX idx_issue_date (issue_date),
     INDEX idx_certificate_type (certificate_type),
-    INDEX idx_is_active (is_active)
+    INDEX idx_status (status),
+    INDEX idx_is_public (is_public),
+    INDEX idx_share_token (share_token)
 );
 
--- Create verification_logs table to track verification attempts
+-- Enhanced verification_logs table
 CREATE TABLE verification_logs (
     id INT AUTO_INCREMENT PRIMARY KEY,
     certificate_id INT NOT NULL,
     dof_no VARCHAR(100) NOT NULL,
-    ip_address VARCHAR(45),
-    user_agent TEXT,
-    verification_status ENUM('success', 'failed', 'not_found') NOT NULL,
+    
+    -- Verifier information
+    verifier_user_id INT NULL, -- If logged in user
+    verifier_ip VARCHAR(45),
+    verifier_user_agent TEXT,
+    verifier_location VARCHAR(100) NULL, -- Detected location
+    
+    -- Verification details
+    verification_method ENUM('qr_scan', 'manual_entry', 'api_call') NOT NULL,
+    verification_status ENUM('success', 'failed', 'not_found', 'expired', 'revoked') NOT NULL,
+    verification_source VARCHAR(100) NULL, -- web, mobile, api, etc.
+    
     verified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     
     FOREIGN KEY (certificate_id) REFERENCES certificates(id) ON DELETE CASCADE,
+    FOREIGN KEY (verifier_user_id) REFERENCES users(id) ON DELETE SET NULL,
     INDEX idx_certificate_id (certificate_id),
     INDEX idx_dof_no (dof_no),
-    INDEX idx_verified_at (verified_at)
+    INDEX idx_verifier_user_id (verifier_user_id),
+    INDEX idx_verified_at (verified_at),
+    INDEX idx_verification_status (verification_status)
 );
 
--- Create certificate_templates table for future template management
+-- Certificate templates table
 CREATE TABLE certificate_templates (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    name VARCHAR(100) NOT NULL UNIQUE,
-    type ENUM('student', 'trainer') NOT NULL,
-    template_data JSON NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    slug VARCHAR(100) NOT NULL UNIQUE,
+    description TEXT,
+    type ENUM('student', 'trainer', 'completion', 'achievement', 'participation') NOT NULL,
+    
+    -- Template design
+    template_data JSON NOT NULL, -- Design configuration
+    preview_image VARCHAR(500) NULL,
+    
+    -- Template metadata
+    created_by_user_id INT NOT NULL,
+    organization_id INT NULL,
+    is_public BOOLEAN DEFAULT FALSE, -- Available to all organizations
     is_active BOOLEAN DEFAULT TRUE,
+    usage_count INT DEFAULT 0,
+    
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    
+    FOREIGN KEY (created_by_user_id) REFERENCES users(id),
+    FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE SET NULL,
+    INDEX idx_slug (slug),
+    INDEX idx_type (type),
+    INDEX idx_is_public (is_public),
+    INDEX idx_is_active (is_active)
 );
 
--- Insert default templates
-INSERT INTO certificate_templates (name, type, template_data) VALUES 
-('Student Certificate Template', 'student', JSON_OBJECT(
+-- User sessions table for JWT token management
+CREATE TABLE user_sessions (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    token_id VARCHAR(255) NOT NULL UNIQUE, -- JWT ID
+    refresh_token VARCHAR(500) NOT NULL UNIQUE,
+    ip_address VARCHAR(45),
+    user_agent TEXT,
+    is_active BOOLEAN DEFAULT TRUE,
+    expires_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_user_id (user_id),
+    INDEX idx_token_id (token_id),
+    INDEX idx_refresh_token (refresh_token),
+    INDEX idx_expires_at (expires_at)
+);
+
+-- Password reset tokens
+CREATE TABLE password_reset_tokens (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    token VARCHAR(255) NOT NULL UNIQUE,
+    expires_at TIMESTAMP NOT NULL,
+    used_at TIMESTAMP NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_token (token),
+    INDEX idx_user_id (user_id),
+    INDEX idx_expires_at (expires_at)
+);
+
+-- Email verification tokens
+CREATE TABLE email_verification_tokens (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    token VARCHAR(255) NOT NULL UNIQUE,
+    email VARCHAR(255) NOT NULL, -- The email being verified
+    expires_at TIMESTAMP NOT NULL,
+    verified_at TIMESTAMP NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_token (token),
+    INDEX idx_user_id (user_id)
+);
+
+-- User activities log
+CREATE TABLE user_activities (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    activity_type ENUM('login', 'logout', 'certificate_issued', 'certificate_claimed', 'certificate_shared', 'profile_updated') NOT NULL,
+    description TEXT,
+    ip_address VARCHAR(45),
+    user_agent TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_user_id (user_id),
+    INDEX idx_activity_type (activity_type),
+    INDEX idx_created_at (created_at)
+);
+
+-- Insert default admin user
+INSERT INTO users (
+    email, password_hash, first_name, last_name, role, is_verified, is_active, profile_completed
+) VALUES (
+    'admin@certifypro.com',
+    '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj1xUVOrcH6W', -- password: admin123
+    'System',
+    'Administrator',
+    'admin',
+    TRUE,
+    TRUE,
+    TRUE
+);
+
+-- Insert default organization
+INSERT INTO organizations (
+    name, slug, description, admin_user_id
+) VALUES (
+    'CertifyPro',
+    'certifypro',
+    'Default organization for CertifyPro platform',
+    1
+);
+
+-- Insert default certificate templates
+INSERT INTO certificate_templates (name, slug, type, template_data, created_by_user_id, is_public) VALUES 
+('Modern Student Certificate', 'modern-student', 'student', JSON_OBJECT(
+    'layout', JSON_OBJECT(
+        'size', 'A4',
+        'orientation', 'landscape',
+        'margin', '2cm'
+    ),
     'header', JSON_OBJECT(
         'leftLogo', 'suretrust-logo.png',
         'rightLogo', 'actie-logo.png',
-        'title', 'SureTrust Certificate',
-        'description', 'Professional Training Certification'
+        'title', 'Certificate of Achievement',
+        'subtitle', 'This is to certify that'
     ),
     'body', JSON_OBJECT(
-        'certificationText', 'This certificate is issued to',
-        'completionText', 'for successful completion of {duration} training in "{program}" subject course from "{course}" start date to end date securing GPA "{gpa}" attending mandatory "Life Skills Training Sessions" by SureTrust.'
+        'recipientNameStyle', JSON_OBJECT('fontSize', '36px', 'fontWeight', 'bold', 'color', '#2563eb'),
+        'completionText', 'has successfully completed {duration} training in "{program}" subject course from "{course}" from {startDate} to {endDate} securing GPA "{gpa}" attending mandatory "Life Skills Training Sessions" by SureTrust.',
+        'skillsSection', true,
+        'gradesSection', true
+    ),
+    'footer', JSON_OBJECT(
+        'qrPosition', 'bottom-left',
+        'signaturePosition', 'bottom-center',
+        'datePosition', 'bottom-right',
+        'refNoPosition', 'bottom-right'
+    ),
+    'styling', JSON_OBJECT(
+        'primaryColor', '#2563eb',
+        'secondaryColor', '#64748b',
+        'fontFamily', 'Inter',
+        'borderStyle', 'modern'
+    )
+), 1, TRUE),
+('Professional Trainer Certificate', 'professional-trainer', 'trainer', JSON_OBJECT(
+    'layout', JSON_OBJECT(
+        'size', 'A4',
+        'orientation', 'landscape',
+        'margin', '2cm'
+    ),
+    'header', JSON_OBJECT(
+        'leftLogo', 'suretrust-logo.png',
+        'rightLogo', 'actie-logo.png',
+        'title', 'Professional Trainer Certification',
+        'subtitle', 'This certificate is issued to'
+    ),
+    'body', JSON_OBJECT(
+        'recipientNameStyle', JSON_OBJECT('fontSize', '36px', 'fontWeight', 'bold', 'color', '#059669'),
+        'completionText', 'in recognition of expertise in "{specialization}" with {experience} years of professional training experience and dedication to excellence in education.',
+        'expertiseSection', true,
+        'credentialsSection', true
     ),
     'footer', JSON_OBJECT(
         'qrPosition', 'bottom-left',
         'signaturePosition', 'bottom-center',
         'datePosition', 'bottom-right'
-    )
-)),
-('Trainer Certificate Template', 'trainer', JSON_OBJECT(
-    'header', JSON_OBJECT(
-        'leftLogo', 'suretrust-logo.png',
-        'rightLogo', 'actie-logo.png',
-        'title', 'SureTrust Trainer Certification',
-        'description', 'Professional Trainer Certification'
     ),
-    'body', JSON_OBJECT(
-        'certificationText', 'This certificate is issued to',
-        'completionText', 'in recognition of expertise in "{specialization}" with {experience} years of training experience.'
-    ),
-    'footer', JSON_OBJECT(
-        'qrPosition', 'bottom-left',
-        'signaturePosition', 'bottom-center',
-        'datePosition', 'bottom-right'
+    'styling', JSON_OBJECT(
+        'primaryColor', '#059669',
+        'secondaryColor', '#64748b',
+        'fontFamily', 'Inter',
+        'borderStyle', 'professional'
     )
-));
+), 1, TRUE);
 
 -- Create stored procedures for common operations
 

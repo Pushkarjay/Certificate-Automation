@@ -30,7 +30,8 @@ class CertificateMySQL {
       const {
         name, program, refNo, issueDate, certificateType = 'student',
         trainingDuration, subjectCourse, startDate, endDate, gpa,
-        specialization, experienceYears
+        specialization, experienceYears, userId, recipientEmail,
+        issuedBy, issuerName
       } = certificateData;
 
       // Generate unique DOF number
@@ -50,14 +51,16 @@ class CertificateMySQL {
         INSERT INTO certificates (
           ref_no, dof_no, name, program, certificate_type, issue_date,
           training_duration, subject_course, start_date, end_date, gpa,
-          specialization, experience_years, qr_code_data, verification_url
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          specialization, experience_years, qr_code_data, verification_url,
+          user_id, recipient_email, issued_by, issuer_name
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `;
 
       const params = [
         refNo, dofNo, name, program, certificateType, issueDate,
         trainingDuration, subjectCourse, startDate, endDate, gpa,
-        specialization, experienceYears, qrCodeData, verificationUrl
+        specialization, experienceYears, qrCodeData, verificationUrl,
+        userId, recipientEmail, issuedBy, issuerName
       ];
 
       const result = await executeQuery(query, params);
@@ -310,6 +313,152 @@ class CertificateMySQL {
     
     throw new Error('Search failed');
   }
-}
 
-module.exports = CertificateMySQL;
+  // Find certificates by user ID
+  static async findByUser(userId, page = 1, limit = 10) {
+    const offset = (page - 1) * limit;
+    
+    try {
+      // Get certificates for specific user
+      const result = await executeQuery(
+        `SELECT c.*, u.first_name, u.last_name, u.email,
+                o.name as organization_name
+         FROM certificates c
+         LEFT JOIN users u ON c.user_id = u.id
+         LEFT JOIN organizations o ON c.organization_id = o.id
+         WHERE c.user_id = ? AND c.is_active = TRUE
+         ORDER BY c.issue_date DESC
+         LIMIT ? OFFSET ?`,
+        [userId, limit, offset]
+      );
+      
+      if (result.success) {
+        // Get total count
+        const countResult = await executeQueryOne(
+          'SELECT COUNT(*) as total FROM certificates WHERE user_id = ? AND is_active = TRUE',
+          [userId]
+        );
+        
+        const total = countResult.success ? countResult.data.total : 0;
+        const totalPages = Math.ceil(total / limit);
+        
+        return {
+          data: result.data.map(cert => this.formatCertificate(cert)),
+          pagination: {
+            page,
+            limit,
+            total,
+            totalPages,
+            hasNext: page < totalPages,
+            hasPrev: page > 1
+          }
+        };
+      }
+    } catch (error) {
+      console.error('Error in findByUser:', error);
+    }
+    
+    throw new Error('Failed to fetch user certificates');
+  }
+
+  // Search certificates by user ID
+  static async searchByUser(userId, searchTerm, page = 1, limit = 10) {
+    const offset = (page - 1) * limit;
+    const searchPattern = `%${searchTerm}%`;
+    
+    try {
+      const result = await executeQuery(
+        `SELECT c.*, u.first_name, u.last_name, u.email,
+                o.name as organization_name
+         FROM certificates c
+         LEFT JOIN users u ON c.user_id = u.id
+         LEFT JOIN organizations o ON c.organization_id = o.id
+         WHERE c.user_id = ? AND c.is_active = TRUE
+         AND (c.name LIKE ? OR c.program LIKE ? OR c.ref_no LIKE ? OR c.dof_no LIKE ?)
+         ORDER BY c.issue_date DESC
+         LIMIT ? OFFSET ?`,
+        [userId, searchPattern, searchPattern, searchPattern, searchPattern, limit, offset]
+      );
+      
+      if (result.success) {
+        // Get total count for search
+        const countResult = await executeQueryOne(
+          `SELECT COUNT(*) as total FROM certificates 
+           WHERE user_id = ? AND is_active = TRUE
+           AND (name LIKE ? OR program LIKE ? OR ref_no LIKE ? OR dof_no LIKE ?)`,
+          [userId, searchPattern, searchPattern, searchPattern, searchPattern]
+        );
+        
+        const total = countResult.success ? countResult.data.total : 0;
+        const totalPages = Math.ceil(total / limit);
+        
+        return {
+          data: result.data.map(cert => this.formatCertificate(cert)),
+          pagination: {
+            page,
+            limit,
+            total,
+            totalPages,
+            hasNext: page < totalPages,
+            hasPrev: page > 1
+          },
+          searchTerm
+        };
+      }
+    } catch (error) {
+      console.error('Error in searchByUser:', error);
+    }
+    
+    throw new Error('Failed to search user certificates');
+  }
+
+  // Get certificate claim information for unregistered users
+  static async getClaimInfo(dofNo) {
+    const result = await executeQueryOne(
+      `SELECT c.id, c.dof_no, c.name, c.program, c.recipient_email, c.user_id,
+              c.issue_date, c.issuer_name
+       FROM certificates c
+       WHERE c.dof_no = ? AND c.is_active = TRUE`,
+      [dofNo]
+    );
+    
+    if (result.success && result.data) {
+      return {
+        success: true,
+        data: {
+          id: result.data.id,
+          dofNo: result.data.dof_no,
+          recipientName: result.data.name,
+          program: result.data.program,
+          recipientEmail: result.data.recipient_email,
+          isClaimed: !!result.data.user_id,
+          issueDate: result.data.issue_date,
+          issuerName: result.data.issuer_name
+        }
+      };
+    }
+    
+    return { success: false, message: 'Certificate not found' };
+  }
+
+  // Claim certificate by user
+  static async claimByUser(dofNo, userId) {
+    try {
+      // Check if certificate exists and is not claimed
+      const cert = await this.getClaimInfo(dofNo);
+      
+      if (!cert.success) {
+        return { success: false, message: 'Certificate not found' };
+      }
+      
+      if (cert.data.isClaimed) {
+        return { success: false, message: 'Certificate already claimed' };
+      }
+      
+      // Update certificate with user ID
+      const result = await executeQuery(
+        'UPDATE certificates SET user_id = ?, updated_at = CURRENT_TIMESTAMP WHERE dof_no = ?',
+        [userId, dofNo]
+      );
+      
+      if

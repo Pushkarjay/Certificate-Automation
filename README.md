@@ -1,278 +1,306 @@
-# Certificate Generation & Verification System
+# CertifyPro - Digital Certificate Platform
 
-A comprehensive digital certificate management system built with React, Node.js, and MongoDB. This system allows for secure generation, storage, and verification of digital certificates with QR code integration.
+A comprehensive digital certificate management platform built with React, Node.js, and dual database support (MongoDB/MySQL). Think of it as a custom Credly clone with advanced features for certificate generation, verification, and management.
 
-## 🚀 Features
+## 🌟 Key Features
 
-- **Certificate Generation**: Create professional digital certificates with customizable templates
-- **QR Code Integration**: Automatic QR code generation for quick verification
-- **Secure Verification**: Verify certificate authenticity via QR scanning or DOF number entry
-- **Database Storage**: Secure storage of certificate data with MongoDB
-- **Responsive Design**: Modern, mobile-friendly user interface
-- **Real-time Verification**: Instant certificate validation
-- **Certificate Management**: View, search, and manage all certificates
-- **RESTful API**: Complete API for integration with other systems
+### 🔐 **Authentication & Authorization**
+- **Multi-role Authentication**: Admin and User accounts
+- **Social Login**: Google OAuth integration
+- **Email/Password**: Traditional login system
+- **Profile Management**: Complete user profiles with secondary email, phone, etc.
 
-## 🛠️ Tech Stack
+### 📜 **Certificate Management**
+- **Admin Features**: Issue, manage, and track certificates
+- **User Features**: Store, download, share, and verify certificates
+- **QR Code Integration**: Instant verification via QR scanning
+- **Digital Wallet**: Personal certificate portfolio
 
-### Frontend
-- **React 18** - Modern UI framework
-- **React Router** - Client-side routing
-- **Tailwind CSS** - Utility-first CSS framework
-- **Axios** - HTTP client for API calls
-- **React Icons** - Icon library
-- **React Toastify** - Toast notifications
-- **QRCode.react** - QR code generation
+### 🛡️ **Security & Verification**
+- **Blockchain-ready**: Secure certificate storage
+- **Real-time Verification**: Instant authenticity checks
+- **Audit Trails**: Complete verification history
+- **Anti-fraud Protection**: Advanced security measures
 
-### Backend
-- **Node.js** - JavaScript runtime
-- **Express.js** - Web framework
-- **Database Options:**
-  - **MongoDB** - NoSQL database with Mongoose ODM
-  - **MySQL** - Relational database with mysql2 driver
-- **QRCode** - Server-side QR code generation
-- **Joi** - Data validation
-- **Helmet** - Security middleware
-- **CORS** - Cross-origin resource sharing
+### 🎨 **Modern Interface**
+- **Responsive Design**: Works on all devices
+- **Professional Templates**: Beautiful certificate designs
+- **Dashboard**: Comprehensive admin and user dashboards
+- **Search & Filter**: Advanced certificate discovery
 
-## 📋 Prerequisites
+## 🏗️ Architecture
 
-- Node.js (v14 or higher)
-- **Database (choose one):**
-  - MongoDB (v4.4 or higher) - Default option
-  - MySQL (v8.0 or higher) - Alternative option
-- npm or yarn package manager
-
-## 🔧 Installation
-
-1. **Clone the repository**
-   ```bash
-   git clone <repository-url>
-   cd Certificate-Automation
-   ```
-
-2. **Install dependencies**
-   ```bash
-   npm run install-all
-   ```
-   Or install separately:
-   ```bash
-   # Install root dependencies
-   npm install
-   
-   # Install server dependencies
-   cd server && npm install
-   
-   # Install client dependencies
-   cd ../client && npm install
-   ```
-
-4. **Set up database and environment variables**
-   
-   **Option A: MongoDB (Default)**
-   ```bash
-   # Make sure MongoDB is running
-   # Create server/.env file:
-   ```
-   
-   **Server (.env in /server directory):**
-   ```env
-   PORT=5000
-   MONGODB_URI=mongodb://localhost:27017/certificate_db
-   NODE_ENV=development
-   JWT_SECRET=your_jwt_secret_key_here
-   FRONTEND_URL=http://localhost:3000
-   ```
-   
-   **Option B: MySQL (Alternative)**
-   ```bash
-   # Run MySQL setup script
-   ./setup-mysql.bat    # Windows
-   ./setup-mysql.sh     # Linux/Mac
-   ```
-   
-   **Client (.env in /client directory):**
-   ```env
-   REACT_APP_API_URL=http://localhost:5000/api
-   GENERATE_SOURCEMAP=false
-   ```
-
-5. **Run the application**
-   ```bash
-   # Run both frontend and backend concurrently
-   npm run dev
-   
-   # Or run separately:
-   # Backend only
-   npm run server
-   
-   # Frontend only
-   npm run client
-   ```
-
-## 🌐 API Endpoints
-
-### MongoDB API (`/api/certificates`)
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/certificates` | Generate new certificate |
-| GET | `/api/certificates` | Get all certificates (paginated) |
-| GET | `/api/certificates/:id` | Get certificate by ID |
-| GET | `/api/certificates/verify/:dofNo` | Verify certificate by DOF number |
-| DELETE | `/api/certificates/:id` | Deactivate certificate |
-
-### MySQL API (`/api/mysql/certificates`)
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/mysql/certificates` | Generate new certificate |
-| GET | `/api/mysql/certificates` | Get all certificates (paginated + search) |
-| GET | `/api/mysql/certificates/:id` | Get certificate by ID |
-| GET | `/api/mysql/certificates/verify/:dofNo` | Verify certificate |
-| DELETE | `/api/mysql/certificates/:id` | Deactivate certificate |
-| GET | `/api/mysql/certificates/stats/:dofNo` | Get verification statistics |
-
-### System Endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/health` | Health check for both databases |
-| GET | `/api/databases` | Available database information |
-
-### Request/Response Examples
-
-**Generate Certificate:**
-```json
-POST /api/certificates
-{
-  "name": "John Doe",
-  "program": "Web Development Bootcamp",
-  "refNo": "REF-2024-001",
-  "issueDate": "2024-12-06"
-}
+```
+CertifyPro Platform
+├── 👥 User Management
+│   ├── Authentication (JWT + OAuth)
+│   ├── Role-based Access Control
+│   └── Profile Management
+├── 📜 Certificate Engine
+│   ├── Template System
+│   ├── QR Code Generation
+│   └── Verification System
+├── 💾 Dual Database Support
+│   ├── MongoDB (NoSQL)
+│   └── MySQL (Relational)
+└── 🌐 RESTful API
+    ├── Public Endpoints
+    ├── Admin Endpoints
+    └── User Endpoints
 ```
 
-**Verify Certificate:**
-```json
-GET /api/certificates/verify/DOF-1733515200000-A1B2C3D4
+## 👥 User Roles
 
-Response:
-{
-  "success": true,
-  "verified": true,
-  "message": "Certificate verified successfully",
-  "data": {
-    "refNo": "REF-2024-001",
-    "dofNo": "DOF-1733515200000-A1B2C3D4",
-    "name": "John Doe",
-    "program": "Web Development Bootcamp",
-    "issueDate": "2024-12-06T00:00:00.000Z",
-    "verificationCount": 1,
-    "lastVerified": "2024-12-06T12:30:00.000Z"
-  }
-}
-```
+### 🔧 **Admin Role**
+- Issue and manage certificates
+- Create certificate templates
+- Manage users and organizations
+- View analytics and reports
+- Bulk certificate operations
 
-## 📱 Usage
+### 👤 **User Role**
+- View personal certificate portfolio
+- Download and share certificates
+- Verify other certificates
+- Manage profile and preferences
+- Track certificate history
 
-### For Administrators
+## 🚀 Quick Start
 
-1. **Generate Certificates**
-   - Navigate to `/generate`
-   - Fill in recipient details
-   - Click "Generate Certificate"
-   - Download or print the certificate
+### Prerequisites
+- Node.js (v16 or higher)
+- Database: MongoDB OR MySQL
+- Google OAuth credentials (optional)
 
-2. **Manage Certificates**
-   - Visit `/certificates` to view all certificates
-   - Search and filter certificates
-   - View individual certificate details
-   - Deactivate certificates if needed
+### Installation
 
-### For End Users
-
-1. **Verify Certificates**
-   - Scan QR code on certificate, or
-   - Visit `/verify` and enter DOF number
-   - View verification status and certificate details
-
-## 🔒 Security Features
-
-- **Input Validation**: All inputs are validated using Joi
-- **Rate Limiting**: API endpoints protected against abuse
-- **Helmet Security**: Security headers for protection
-- **CORS Configuration**: Controlled cross-origin access
-- **Unique Identifiers**: DOF numbers are cryptographically unique
-- **Data Encryption**: Secure storage of certificate data
-
-## 🗃️ Database Schema
-
-### Certificate Collection
-```javascript
-{
-  refNo: String,        // Reference number (unique)
-  dofNo: String,        // DOF number for verification (unique)
-  name: String,         // Recipient name
-  program: String,      // Program/course name
-  issueDate: Date,      // Issue date
-  qrCodeUrl: String,    // QR code data URL
-  isActive: Boolean,    // Certificate status
-  metadata: {
-    generatedBy: String,
-    generatedAt: Date,
-    lastVerified: Date,
-    verificationCount: Number
-  },
-  createdAt: Date,
-  updatedAt: Date
-}
-```
-
-## 🚀 Deployment
-
-### Production Build
 ```bash
-# Build frontend
-cd client && npm run build
+# Clone repository
+git clone https://github.com/Pushkarjay/Certificate-Automation.git
+cd Certificate-Automation
 
-# Start production server
-cd ../server && npm start
+# Install dependencies
+npm run install-all
+
+# Setup database (choose one)
+npm run setup:mongodb    # For MongoDB
+npm run setup:mysql      # For MySQL
+
+# Configure environment
+cp server/.env.example server/.env
+cp client/.env.example client/.env
+
+# Start development server
+npm run dev
 ```
 
-### Environment Variables for Production
-- Set `NODE_ENV=production`
-- Update `MONGODB_URI` to production database
-- Update `FRONTEND_URL` to production domain
-- Set secure `JWT_SECRET`
+### Default Admin Account
+```
+Email: admin@certifypro.com
+Password: admin123
+```
+
+## 🔧 Configuration
+
+### Environment Variables
+
+**Server (.env)**
+```env
+# Application
+PORT=5000
+NODE_ENV=development
+JWT_SECRET=your_super_secure_jwt_secret
+FRONTEND_URL=http://localhost:3000
+
+# Database (MongoDB)
+MONGODB_URI=mongodb://localhost:27017/certifypro_db
+
+# Database (MySQL) - Alternative
+DB_HOST=localhost
+DB_PORT=3306
+DB_NAME=certifypro_db
+DB_USER=root
+DB_PASSWORD=your_password
+
+# Email Service
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=your-email@gmail.com
+SMTP_PASS=your-app-password
+
+# Google OAuth
+GOOGLE_CLIENT_ID=your-google-client-id
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+
+# File Storage
+UPLOAD_PATH=./uploads
+MAX_FILE_SIZE=5MB
+```
+
+**Client (.env)**
+```env
+REACT_APP_API_URL=http://localhost:5000/api
+REACT_APP_GOOGLE_CLIENT_ID=your-google-client-id
+GENERATE_SOURCEMAP=false
+```
+
+## 📚 API Documentation
+
+### Authentication Endpoints
+```
+POST   /api/auth/register        # User registration
+POST   /api/auth/login           # User login
+POST   /api/auth/google          # Google OAuth
+POST   /api/auth/forgot-password # Password reset
+GET    /api/auth/me              # Get current user
+PUT    /api/auth/profile         # Update profile
+```
+
+### Admin Endpoints (Protected)
+```
+POST   /api/admin/certificates        # Issue certificate
+GET    /api/admin/certificates        # Manage certificates
+POST   /api/admin/templates          # Create templates
+GET    /api/admin/users              # Manage users
+GET    /api/admin/analytics          # View analytics
+```
+
+### User Endpoints (Protected)
+```
+GET    /api/user/certificates         # My certificates
+GET    /api/user/shared/:id           # Shared certificates
+POST   /api/user/verify/:dofNo        # Verify certificate
+GET    /api/user/profile              # User profile
+PUT    /api/user/preferences          # Update preferences
+```
+
+### Public Endpoints
+```
+GET    /api/public/verify/:dofNo      # Public verification
+GET    /api/public/certificate/:id    # Public certificate view
+GET    /api/public/shared/:shareId    # Shared certificate link
+```
+
+## 🎯 User Journeys
+
+### 👤 **For Certificate Recipients**
+1. **Receive Notification** → Email with certificate link
+2. **Create Account** → Sign up to claim certificate
+3. **Digital Wallet** → View all earned certificates
+4. **Share & Verify** → Share achievements publicly
+5. **Download** → PDF/Image formats available
+
+### 🔧 **For Certificate Issuers (Admins)**
+1. **Admin Dashboard** → Complete management interface
+2. **Template Creation** → Design certificate templates
+3. **Bulk Issuance** → Issue multiple certificates
+4. **Analytics** → Track certificate performance
+5. **User Management** → Manage recipients
+
+### 🔍 **For Verifiers (Public)**
+1. **QR Scan** → Instant verification via mobile
+2. **Manual Entry** → Verify using DOF number
+3. **Public View** → See certificate details
+4. **Verification History** → Track verification attempts
+
+## 🛡️ Security Features
+
+- **JWT Authentication** with refresh tokens
+- **Role-based Access Control** (RBAC)
+- **Input Validation** and sanitization
+- **Rate Limiting** on all endpoints
+- **HTTPS Enforcement** in production
+- **Password Hashing** with bcrypt
+- **XSS Protection** and CSRF tokens
+- **Audit Logging** for all operations
+
+## 🎨 Features Overview
+
+### Certificate Templates
+- **Professional Designs** for various industries
+- **Customizable Fields** and branding
+- **Template Library** with pre-made options
+- **Brand Guidelines** enforcement
+
+### Digital Wallet
+- **Portfolio View** of all certificates
+- **Search & Filter** capabilities
+- **Sharing Options** (social media, email, direct link)
+- **Privacy Controls** (public/private certificates)
+
+### Verification System
+- **QR Code Scanning** with mobile app
+- **Blockchain Integration** (planned)
+- **Verification Badges** for websites
+- **API Access** for third-party integration
+
+## 📱 Mobile App (Planned)
+- Native iOS and Android apps
+- QR code scanning
+- Certificate wallet
+- Push notifications
+- Offline verification
+
+## 🔮 Roadmap
+
+### Phase 1 (Current)
+- ✅ User authentication system
+- ✅ Role-based access control
+- ✅ Basic certificate management
+- ✅ QR code verification
+
+### Phase 2 (Next)
+- 🔲 Advanced templates
+- 🔲 Bulk operations
+- 🔲 Email notifications
+- 🔲 Social sharing
+
+### Phase 3 (Future)
+- 🔲 Mobile applications
+- 🔲 Blockchain integration
+- 🔲 API marketplace
+- 🔲 White-label solutions
 
 ## 🤝 Contributing
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
 
-## 📝 License
+### Development Setup
+```bash
+# Fork the repository
+git fork https://github.com/Pushkarjay/Certificate-Automation.git
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+# Create feature branch
+git checkout -b feature/awesome-feature
 
-## 📞 Support
+# Make changes and test
+npm test
 
-For support and questions:
-- Create an issue in the repository
-- Contact: [your-email@example.com]
+# Commit and push
+git commit -m "Add awesome feature"
+git push origin feature/awesome-feature
 
-## 🔄 Version History
+# Create Pull Request
+```
 
-- **v1.0.0** - Initial release with core features
-  - Certificate generation with QR codes
-  - Verification system
-  - Database integration
-  - Responsive web interface
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🌟 Star the Project
+
+If you find this project useful, please consider giving it a star on GitHub!
+
+## 📞 Support & Community
+
+- 🐛 **Bug Reports**: [GitHub Issues](https://github.com/Pushkarjay/Certificate-Automation/issues)
+- 💡 **Feature Requests**: [GitHub Discussions](https://github.com/Pushkarjay/Certificate-Automation/discussions)
+- 📧 **Email**: support@certifypro.com
+- 💬 **Discord**: [Join our community](https://discord.gg/certifypro)
 
 ---
 
-**Built with ❤️ using React, Node.js, and MongoDB**
+**Built with ❤️ by developers, for the digital credential ecosystem**
+
+*Making digital certificates accessible, secure, and beautiful.*
 
