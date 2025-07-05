@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const path = require('path');
 require('dotenv').config();
 
 // Import database configurations
@@ -30,8 +31,24 @@ const limiter = rateLimit({
 app.use(limiter);
 
 // Middleware
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:5000',
+  process.env.FRONTEND_URL
+].filter(Boolean);
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV === 'production') {
+      return callback(null, true);
+    } else {
+      const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+      return callback(new Error(msg), false);
+    }
+  },
   credentials: true
 }));
 app.use(express.json());
@@ -49,13 +66,48 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/certifica
 // MySQL connection test
 testMySQLConnection();
 
-// Routes
+// API Routes
+app.use('/api/auth', authRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/claims', claimRoutes);
+app.use('/api/admin', adminRoutes);
 app.use('/api/certificates', certificateRoutes); // MongoDB routes
 app.use('/api/mysql/certificates', certificateMySQLRoutes); // MySQL routes
-app.use('/api/auth', authRoutes); // Authentication routes
-app.use('/api/users', userRoutes); // User profile routes
-app.use('/api/claims', claimRoutes); // Certificate claiming routes
-app.use('/api/admin', adminRoutes); // Admin management routes
+
+// Serve static files from React build (for production)
+if (process.env.NODE_ENV === 'production') {
+  // Serve static files from the client build directory
+  app.use(express.static(path.join(__dirname, '../client/build')));
+  
+  // Handle React routing, return all requests to React app
+  app.get('*', (req, res) => {
+    // Don't serve index.html for API routes
+    if (req.path.startsWith('/api/')) {
+      return res.status(404).json({ error: 'API route not found' });
+    }
+    res.sendFile(path.join(__dirname, '../client/build', 'index.html'));
+  });
+} else {
+  // Development mode - just show API info
+  app.get('/', (req, res) => {
+    res.status(200).json({
+      message: 'Welcome to the Certificate API',
+      availableRoutes: [
+        { method: 'POST', path: '/api/certificates' },
+        { method: 'GET', path: '/api/certificates' },
+        { method: 'GET', path: '/api/certificates/:id' },
+        { method: 'GET', path: '/api/certificates/verify/:dofNo' },
+        { method: 'DELETE', path: '/api/certificates/:id' },
+        { method: 'POST', path: '/api/mysql/certificates' },
+        { method: 'GET', path: '/api/mysql/certificates' },
+        { method: 'GET', path: '/api/mysql/certificates/:id' },
+        { method: 'GET', path: '/api/mysql/certificates/verify/:dofNo' },
+        { method: 'DELETE', path: '/api/mysql/certificates/:id' },
+        { method: 'GET', path: '/api/mysql/certificates/stats/:dofNo' }
+      ]
+    });
+  });
+}
 
 // Health check endpoint
 app.get('/api/health', async (req, res) => {
@@ -116,9 +168,9 @@ app.use((err, req, res, next) => {
   });
 });
 
-// 404 handler
-app.use('*', (req, res) => {
-  res.status(404).json({ error: 'Route not found' });
+// 404 handler for API routes only (React handles frontend routes)
+app.use('/api/*', (req, res) => {
+  res.status(404).json({ error: 'API route not found' });
 });
 
 app.listen(PORT, () => {
