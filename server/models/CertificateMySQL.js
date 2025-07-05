@@ -461,4 +461,20 @@ class CertificateMySQL {
         [userId, dofNo]
       );
       
-      if
+      if (result.success) {
+        return { 
+          success: true, 
+          message: 'Certificate claimed successfully',
+          data: await this.findById(cert.data.id)
+        };
+      }
+      
+      throw new Error(result.error);
+    } catch (error) {
+      console.error('Error in claimByUser:', error);
+      throw new Error('Failed to claim certificate');
+    }
+  }
+}
+
+module.exports = CertificateMySQL;
