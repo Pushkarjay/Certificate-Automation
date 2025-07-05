@@ -5,7 +5,12 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 require('dotenv').config();
 
+// Import database configurations
+const { testConnection: testMySQLConnection } = require('./config/database');
+
+// Import routes
 const certificateRoutes = require('./routes/certificates');
+const certificateMySQLRoutes = require('./routes/certificatesMySQL');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -28,23 +33,69 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Database connections
 // MongoDB connection
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/certificate_db', {
   useNewUrlParser: true,
   useUnifiedTopology: true,
 })
-.then(() => console.log('MongoDB connected successfully'))
-.catch((err) => console.error('MongoDB connection error:', err));
+.then(() => console.log('✅ MongoDB connected successfully'))
+.catch((err) => console.error('❌ MongoDB connection error:', err));
+
+// MySQL connection test
+testMySQLConnection();
 
 // Routes
-app.use('/api/certificates', certificateRoutes);
+app.use('/api/certificates', certificateRoutes); // MongoDB routes
+app.use('/api/mysql/certificates', certificateMySQLRoutes); // MySQL routes
 
 // Health check endpoint
-app.get('/api/health', (req, res) => {
+app.get('/api/health', async (req, res) => {
+  const mongoStatus = mongoose.connection.readyState === 1 ? 'connected' : 'disconnected';
+  const mysqlStatus = await testMySQLConnection() ? 'connected' : 'disconnected';
+  
   res.status(200).json({ 
     status: 'OK', 
     message: 'Certificate API is running',
+    databases: {
+      mongodb: mongoStatus,
+      mysql: mysqlStatus
+    },
     timestamp: new Date().toISOString()
+  });
+});
+
+// Database selection endpoint
+app.get('/api/databases', (req, res) => {
+  res.status(200).json({
+    available: ['mongodb', 'mysql'],
+    endpoints: {
+      mongodb: '/api/certificates',
+      mysql: '/api/mysql/certificates'
+    },
+    features: {
+      mongodb: {
+        description: 'NoSQL database with flexible schema',
+        endpoints: [
+          'POST /api/certificates',
+          'GET /api/certificates',
+          'GET /api/certificates/:id',
+          'GET /api/certificates/verify/:dofNo',
+          'DELETE /api/certificates/:id'
+        ]
+      },
+      mysql: {
+        description: 'Relational database with structured schema',
+        endpoints: [
+          'POST /api/mysql/certificates',
+          'GET /api/mysql/certificates',
+          'GET /api/mysql/certificates/:id',
+          'GET /api/mysql/certificates/verify/:dofNo',
+          'DELETE /api/mysql/certificates/:id',
+          'GET /api/mysql/certificates/stats/:dofNo'
+        ]
+      }
+    }
   });
 });
 
@@ -63,6 +114,9 @@ app.use('*', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log(`Environment: ${process.env.NODE_ENV}`);
+  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`🌍 Environment: ${process.env.NODE_ENV}`);
+  console.log(`📊 Available databases: MongoDB & MySQL`);
+  console.log(`🔗 MongoDB API: http://localhost:${PORT}/api/certificates`);
+  console.log(`🔗 MySQL API: http://localhost:${PORT}/api/mysql/certificates`);
 });

@@ -20,7 +20,9 @@
 
 ### 🔧 **Backend Features**
 - **Express.js** RESTful API
-- **MongoDB** with Mongoose ODM
+- **Dual Database Support:**
+  - **MongoDB** with Mongoose ODM (NoSQL)
+  - **MySQL** with mysql2 driver (Relational)
 - **QR Code generation** for certificates
 - **Input validation** with Joi
 - **Security middleware** (Helmet, CORS, Rate limiting)
@@ -36,11 +38,14 @@
 - **Certificate templates** with proper formatting
 
 ### 🗄️ **Database**
-- **MongoDB schema** designed for certificates
+- **MongoDB schema** designed for certificates (NoSQL)
+- **MySQL schema** with relational structure (SQL)
 - **Indexing strategy** for performance
 - **Data validation** and constraints
+- **Audit logging** and verification tracking (MySQL)
+- **Stored procedures** for complex operations (MySQL)
+- **Database views** for easier querying (MySQL)
 - **Backup and restore** procedures documented
-- **SQL equivalent** schema provided for reference
 
 ### 🔐 **Security**
 - **Input validation** on all endpoints
@@ -67,6 +72,7 @@
 
 ## 📋 **API Endpoints**
 
+### MongoDB API (`/api/certificates`)
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | POST | `/api/certificates` | Generate new certificate |
@@ -74,7 +80,22 @@
 | GET | `/api/certificates/:id` | Get certificate by ID |
 | GET | `/api/certificates/verify/:dofNo` | Verify certificate |
 | DELETE | `/api/certificates/:id` | Deactivate certificate |
-| GET | `/api/health` | Health check |
+
+### MySQL API (`/api/mysql/certificates`)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/mysql/certificates` | Generate new certificate |
+| GET | `/api/mysql/certificates` | Get all certificates (paginated + search) |
+| GET | `/api/mysql/certificates/:id` | Get certificate by ID |
+| GET | `/api/mysql/certificates/verify/:dofNo` | Verify certificate |
+| DELETE | `/api/mysql/certificates/:id` | Deactivate certificate |
+| GET | `/api/mysql/certificates/stats/:dofNo` | Get verification statistics |
+
+### System Endpoints
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/health` | Health check for both databases |
+| GET | `/api/databases` | Available database information |
 
 ## 🚀 **Ready to Use Features**
 
@@ -92,50 +113,61 @@
 ## 📁 **File Structure**
 ```
 Certificate-Automation/
-├── client/                 # React frontend
-│   ├── public/            # Static files
+├── client/                    # React frontend
+│   ├── public/               # Static files
 │   ├── src/
-│   │   ├── components/    # Reusable components
-│   │   ├── pages/         # Page components
-│   │   └── services/      # API services
+│   │   ├── components/       # Reusable components
+│   │   ├── pages/           # Page components
+│   │   └── services/        # API services
 │   └── package.json
-├── server/                # Node.js backend
-│   ├── models/           # Database models
-│   ├── routes/           # API routes
+├── server/                   # Node.js backend
+│   ├── config/              # Database configurations
+│   │   └── database.js      # MySQL connection
+│   ├── models/              # Database models
+│   │   ├── Certificate.js   # MongoDB model
+│   │   └── CertificateMySQL.js # MySQL model
+│   ├── routes/              # API routes
+│   │   ├── certificates.js  # MongoDB routes
+│   │   └── certificatesMySQL.js # MySQL routes
 │   └── package.json
-├── DATABASE_SCHEMA.md    # Complete database documentation
-├── README.md            # Project documentation
-├── setup.bat/.sh        # Installation scripts
-└── package.json         # Root package configuration
+├── database/                # Database schemas
+│   └── schema.sql           # MySQL schema
+├── setup-mysql.bat/.sh      # MySQL setup scripts
+├── DATABASE_COMPARISON.md   # Database comparison guide
+├── README.md               # Project documentation
+└── package.json            # Root package configuration
 ```
 
 ## 🎯 **Next Steps for Implementation**
 
-1. **Install Dependencies**
+1. **Choose Database Option**
    ```bash
-   # Run setup script
-   ./setup.bat  # Windows
-   ./setup.sh   # Linux/Mac
+   # Option A: Use MongoDB (default)
+   npm run dev
+   
+   # Option B: Setup MySQL
+   ./setup-mysql.bat  # Windows
+   ./setup-mysql.sh   # Linux/Mac
    ```
 
-2. **Configure Environment**
-   - Update `server/.env` with MongoDB URI
+2. **Install Dependencies**
+   ```bash
+   npm run install-all
+   ```
+
+3. **Configure Environment**
+   - MongoDB: Update `server/.env` with MongoDB URI
+   - MySQL: Run setup script to auto-configure
    - Update `client/.env` with API URL
 
-3. **Start Application**
+4. **Start Application**
    ```bash
    npm run dev  # Start both frontend and backend
    ```
 
-4. **Customize Certificates**
-   - Add SureTrust and ACTIE logos to `/client/public/`
-   - Modify certificate templates in components
-   - Implement trainer certificate structure
-
-5. **Production Deployment**
-   - Set up production MongoDB
-   - Configure production environment variables
-   - Deploy to cloud platform (Heroku, AWS, etc.)
+5. **Choose API Endpoint**
+   - MongoDB API: `http://localhost:5000/api/certificates`
+   - MySQL API: `http://localhost:5000/api/mysql/certificates`
 
 ## 🔮 **Future Enhancements**
 

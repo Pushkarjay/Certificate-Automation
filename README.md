@@ -27,8 +27,9 @@ A comprehensive digital certificate management system built with React, Node.js,
 ### Backend
 - **Node.js** - JavaScript runtime
 - **Express.js** - Web framework
-- **MongoDB** - NoSQL database
-- **Mongoose** - MongoDB object modeling
+- **Database Options:**
+  - **MongoDB** - NoSQL database with Mongoose ODM
+  - **MySQL** - Relational database with mysql2 driver
 - **QRCode** - Server-side QR code generation
 - **Joi** - Data validation
 - **Helmet** - Security middleware
@@ -37,7 +38,9 @@ A comprehensive digital certificate management system built with React, Node.js,
 ## 📋 Prerequisites
 
 - Node.js (v14 or higher)
-- MongoDB (v4.4 or higher)
+- **Database (choose one):**
+  - MongoDB (v4.4 or higher) - Default option
+  - MySQL (v8.0 or higher) - Alternative option
 - npm or yarn package manager
 
 ## 🔧 Installation
@@ -64,7 +67,13 @@ A comprehensive digital certificate management system built with React, Node.js,
    cd ../client && npm install
    ```
 
-3. **Set up environment variables**
+4. **Set up database and environment variables**
+   
+   **Option A: MongoDB (Default)**
+   ```bash
+   # Make sure MongoDB is running
+   # Create server/.env file:
+   ```
    
    **Server (.env in /server directory):**
    ```env
@@ -75,14 +84,18 @@ A comprehensive digital certificate management system built with React, Node.js,
    FRONTEND_URL=http://localhost:3000
    ```
    
+   **Option B: MySQL (Alternative)**
+   ```bash
+   # Run MySQL setup script
+   ./setup-mysql.bat    # Windows
+   ./setup-mysql.sh     # Linux/Mac
+   ```
+   
    **Client (.env in /client directory):**
    ```env
    REACT_APP_API_URL=http://localhost:5000/api
    GENERATE_SOURCEMAP=false
    ```
-
-4. **Start MongoDB**
-   Make sure MongoDB is running on your system.
 
 5. **Run the application**
    ```bash
@@ -99,7 +112,7 @@ A comprehensive digital certificate management system built with React, Node.js,
 
 ## 🌐 API Endpoints
 
-### Certificate Management
+### MongoDB API (`/api/certificates`)
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -108,7 +121,24 @@ A comprehensive digital certificate management system built with React, Node.js,
 | GET | `/api/certificates/:id` | Get certificate by ID |
 | GET | `/api/certificates/verify/:dofNo` | Verify certificate by DOF number |
 | DELETE | `/api/certificates/:id` | Deactivate certificate |
-| GET | `/api/health` | Health check endpoint |
+
+### MySQL API (`/api/mysql/certificates`)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/mysql/certificates` | Generate new certificate |
+| GET | `/api/mysql/certificates` | Get all certificates (paginated + search) |
+| GET | `/api/mysql/certificates/:id` | Get certificate by ID |
+| GET | `/api/mysql/certificates/verify/:dofNo` | Verify certificate |
+| DELETE | `/api/mysql/certificates/:id` | Deactivate certificate |
+| GET | `/api/mysql/certificates/stats/:dofNo` | Get verification statistics |
+
+### System Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/health` | Health check for both databases |
+| GET | `/api/databases` | Available database information |
 
 ### Request/Response Examples
 
