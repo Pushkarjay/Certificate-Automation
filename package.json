@@ -11,7 +11,9 @@
     "install-client": "cd client && npm install",
     "install-all": "npm run install-server && npm run install-client",
     "build": "cd client && npm run build",
-    "start": "cd server && npm start"
+    "start": "cd server && npm start",
+    "render-build": "npm install && npm run install-all && npm run build",
+    "render-start": "cd server && npm start"
   },
   "keywords": ["certificate", "verification", "qr-code", "automation"],
   "author": "Your Name",

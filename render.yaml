@@ -4,7 +4,7 @@ services:
     name: certificate-automation
     env: node
     repo: https://github.com/Pushkarjay/Certificate-Automation.git
-    buildCommand: npm run render-build
+    buildCommand: npm install && npm run install-all && npm run build
     startCommand: npm run render-start
     envVars:
       - key: NODE_ENV
