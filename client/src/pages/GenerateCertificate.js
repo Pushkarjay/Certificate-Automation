@@ -9,22 +9,7 @@ const GenerateCertificate = () => {
     name: '',
     program: '',
     refNo: '',
-    certificateType: 'student',
-    issueDate: new Date().toISOString().split('T')[0], // Today's date
-    // Student-specific fields
-    trainingDuration: '4 month',
-    subject: '',
-    startDate: '',
-    endDate: '',
-    gpa: '',
-    instituteName: 'Sure Trust Institute',
-    founderSign: 'Dr. Founder Name',
-    trainerSign: 'Lead Trainer',
-    // Trainer-specific fields
-    specialization: '',
-    experience: 'Professional',
-    certificationLevel: 'Certified Trainer',
-    validUntil: ''
+    issueDate: new Date().toISOString().split('T')[0] // Today's date
   });
   
   const [loading, setLoading] = useState(false);
@@ -89,20 +74,7 @@ const GenerateCertificate = () => {
           name: '',
           program: '',
           refNo: '',
-          certificateType: 'student',
-          issueDate: new Date().toISOString().split('T')[0],
-          trainingDuration: '4 month',
-          subject: '',
-          startDate: '',
-          endDate: '',
-          gpa: '',
-          instituteName: 'Sure Trust Institute',
-          founderSign: 'Dr. Founder Name',
-          trainerSign: 'Lead Trainer',
-          specialization: '',
-          experience: 'Professional',
-          certificationLevel: 'Certified Trainer',
-          validUntil: ''
+          issueDate: new Date().toISOString().split('T')[0]
         });
       }
     } catch (error) {
@@ -174,7 +146,7 @@ const GenerateCertificate = () => {
   }
 
   return (
-    <div className="max-w-2xl mx-auto">{/* Changed from max-w-md to max-w-2xl */}
+    <div className="max-w-md mx-auto">
       <div className="text-center mb-8">
         <h1 className="text-3xl font-bold text-gray-900 mb-4">
           Generate Certificate
@@ -186,28 +158,11 @@ const GenerateCertificate = () => {
 
       <div className="form-container">
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Certificate Type Selection */}
-          <div className="form-group">
-            <label className="form-label">
-              Certificate Type
-            </label>
-            <select
-              name="certificateType"
-              value={formData.certificateType}
-              onChange={handleInputChange}
-              className="form-input"
-              required
-            >
-              <option value="student">Student Certificate</option>
-              <option value="trainer">Trainer Certificate</option>
-            </select>
-          </div>
-
           {/* Name Field */}
           <div className="form-group">
             <label className="form-label flex items-center space-x-2">
               <FaUser className="text-gray-500" />
-              <span>{formData.certificateType === 'trainer' ? 'Trainer Name' : 'Student Name'}</span>
+              <span>Recipient Name</span>
             </label>
             <input
               type="text"
@@ -215,7 +170,7 @@ const GenerateCertificate = () => {
               value={formData.name}
               onChange={handleInputChange}
               className="form-input"
-              placeholder={`Enter ${formData.certificateType === 'trainer' ? 'trainer' : 'student'}'s full name`}
+              placeholder="Enter recipient's full name"
               required
             />
           </div>
@@ -224,7 +179,7 @@ const GenerateCertificate = () => {
           <div className="form-group">
             <label className="form-label flex items-center space-x-2">
               <FaGraduationCap className="text-gray-500" />
-              <span>{formData.certificateType === 'trainer' ? 'Training Program' : 'Course/Program'}</span>
+              <span>Program/Course Name</span>
             </label>
             <input
               type="text"
@@ -232,7 +187,7 @@ const GenerateCertificate = () => {
               value={formData.program}
               onChange={handleInputChange}
               className="form-input"
-              placeholder={`Enter ${formData.certificateType === 'trainer' ? 'training program' : 'course/program'} name`}
+              placeholder="Enter program or course name"
               required
             />
           </div>
@@ -270,172 +225,6 @@ const GenerateCertificate = () => {
             />
           </div>
 
-          {/* Student-specific fields */}
-          {formData.certificateType === 'student' && (
-            <>
-              <div className="bg-blue-50 p-4 rounded-lg">
-                <h3 className="font-semibold text-blue-800 mb-3">Student Certificate Details</h3>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="form-group">
-                    <label className="form-label">Training Duration</label>
-                    <input
-                      type="text"
-                      name="trainingDuration"
-                      value={formData.trainingDuration}
-                      onChange={handleInputChange}
-                      className="form-input"
-                      placeholder="e.g., 4 month"
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label">Subject/Specialization</label>
-                    <input
-                      type="text"
-                      name="subject"
-                      value={formData.subject}
-                      onChange={handleInputChange}
-                      className="form-input"
-                      placeholder="Enter subject area"
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label">Training Start Date</label>
-                    <input
-                      type="date"
-                      name="startDate"
-                      value={formData.startDate}
-                      onChange={handleInputChange}
-                      className="form-input"
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label">Training End Date</label>
-                    <input
-                      type="date"
-                      name="endDate"
-                      value={formData.endDate}
-                      onChange={handleInputChange}
-                      className="form-input"
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label">GPA/Grade</label>
-                    <input
-                      type="text"
-                      name="gpa"
-                      value={formData.gpa}
-                      onChange={handleInputChange}
-                      className="form-input"
-                      placeholder="e.g., 3.8, A+, 85%"
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label">Institute Name</label>
-                    <input
-                      type="text"
-                      name="instituteName"
-                      value={formData.instituteName}
-                      onChange={handleInputChange}
-                      className="form-input"
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label">Founder Signature</label>
-                    <input
-                      type="text"
-                      name="founderSign"
-                      value={formData.founderSign}
-                      onChange={handleInputChange}
-                      className="form-input"
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label">Trainer Signature</label>
-                    <input
-                      type="text"
-                      name="trainerSign"
-                      value={formData.trainerSign}
-                      onChange={handleInputChange}
-                      className="form-input"
-                    />
-                  </div>
-                </div>
-              </div>
-            </>
-          )}
-
-          {/* Trainer-specific fields */}
-          {formData.certificateType === 'trainer' && (
-            <>
-              <div className="bg-green-50 p-4 rounded-lg">
-                <h3 className="font-semibold text-green-800 mb-3">Trainer Certificate Details</h3>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="form-group">
-                    <label className="form-label">Specialization</label>
-                    <input
-                      type="text"
-                      name="specialization"
-                      value={formData.specialization}
-                      onChange={handleInputChange}
-                      className="form-input"
-                      placeholder="Area of expertise"
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label">Experience Level</label>
-                    <select
-                      name="experience"
-                      value={formData.experience}
-                      onChange={handleInputChange}
-                      className="form-input"
-                    >
-                      <option value="Junior">Junior</option>
-                      <option value="Professional">Professional</option>
-                      <option value="Senior">Senior</option>
-                      <option value="Expert">Expert</option>
-                    </select>
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label">Certification Level</label>
-                    <select
-                      name="certificationLevel"
-                      value={formData.certificationLevel}
-                      onChange={handleInputChange}
-                      className="form-input"
-                    >
-                      <option value="Certified Trainer">Certified Trainer</option>
-                      <option value="Master Trainer">Master Trainer</option>
-                      <option value="Lead Trainer">Lead Trainer</option>
-                      <option value="Senior Trainer">Senior Trainer</option>
-                    </select>
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label">Valid Until (Optional)</label>
-                    <input
-                      type="date"
-                      name="validUntil"
-                      value={formData.validUntil}
-                      onChange={handleInputChange}
-                      className="form-input"
-                    />
-                  </div>
-                </div>
-              </div>
-            </>
-          )}
-
           {/* Submit Button */}
           <button
             type="submit"
@@ -448,7 +237,7 @@ const GenerateCertificate = () => {
                 <span>Generating...</span>
               </>
             ) : (
-              <span>Generate {formData.certificateType === 'trainer' ? 'Trainer' : 'Student'} Certificate</span>
+              <span>Generate Certificate</span>
             )}
           </button>
         </form>

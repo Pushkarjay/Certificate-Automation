@@ -7,32 +7,11 @@ const Certificate = require('../models/Certificate');
 const router = express.Router();
 
 // Validation schemas
-const studentCertificateSchema = Joi.object({
+const certificateSchema = Joi.object({
   name: Joi.string().min(2).max(100).required(),
   program: Joi.string().min(2).max(200).required(),
   refNo: Joi.string().min(1).max(50).required(),
-  certificateType: Joi.string().valid('student').default('student'),
-  issueDate: Joi.date().optional(),
-  trainingDuration: Joi.string().optional(),
-  subject: Joi.string().optional(),
-  startDate: Joi.date().optional(),
-  endDate: Joi.date().optional(),
-  gpa: Joi.string().optional(),
-  instituteName: Joi.string().optional(),
-  founderSign: Joi.string().optional(),
-  trainerSign: Joi.string().optional()
-});
-
-const trainerCertificateSchema = Joi.object({
-  name: Joi.string().min(2).max(100).required(),
-  program: Joi.string().min(2).max(200).required(),
-  refNo: Joi.string().min(1).max(50).required(),
-  certificateType: Joi.string().valid('trainer').required(),
-  issueDate: Joi.date().optional(),
-  specialization: Joi.string().optional(),
-  experience: Joi.string().optional(),
-  certificationLevel: Joi.string().optional(),
-  validUntil: Joi.date().optional()
+  issueDate: Joi.date().optional()
 });
 
 const verificationSchema = Joi.object({
@@ -47,13 +26,8 @@ const generateDofNo = () => {
 // POST /api/certificates - Generate new certificate
 router.post('/', async (req, res) => {
   try {
-    const certificateType = req.body.certificateType || 'student';
-    
-    // Choose validation schema based on certificate type
-    const schema = certificateType === 'trainer' ? trainerCertificateSchema : studentCertificateSchema;
-    
     // Validate request body
-    const { error, value } = schema.validate(req.body);
+    const { error, value } = certificateSchema.validate(req.body);
     if (error) {
       return res.status(400).json({ 
         error: 'Validation error', 
@@ -61,7 +35,7 @@ router.post('/', async (req, res) => {
       });
     }
 
-    const { name, program, refNo, issueDate, ...additionalFields } = value;
+    const { name, program, refNo, issueDate } = value;
 
     // Check if refNo already exists
     const existingCert = await Certificate.findOne({ refNo });
@@ -99,10 +73,8 @@ router.post('/', async (req, res) => {
       dofNo,
       name,
       program,
-      certificateType,
       issueDate: issueDate || new Date(),
       qrCodeUrl: qrCodeDataUrl,
-      ...additionalFields,
       metadata: {
         generatedBy: 'system', // In real app, this would be the admin user
         generatedAt: new Date()
@@ -120,11 +92,9 @@ router.post('/', async (req, res) => {
         dofNo: certificate.dofNo,
         name: certificate.name,
         program: certificate.program,
-        certificateType: certificate.certificateType,
         issueDate: certificate.issueDate,
         qrCodeUrl: certificate.qrCodeUrl,
-        verificationUrl,
-        ...additionalFields
+        verificationUrl
       }
     });
 

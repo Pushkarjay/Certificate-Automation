@@ -24,48 +24,11 @@ const certificateSchema = new mongoose.Schema({
     required: true,
     trim: true
   },
-  certificateType: {
-    type: String,
-    enum: ['student', 'trainer'],
-    default: 'student'
-  },
   issueDate: {
     type: Date,
     required: true,
     default: Date.now
   },
-  // Student-specific fields
-  trainingDuration: {
-    type: String,
-    default: "4 month"
-  },
-  subject: String,
-  startDate: Date,
-  endDate: Date,
-  gpa: String,
-  instituteName: {
-    type: String,
-    default: "Sure Trust Institute"
-  },
-  founderSign: {
-    type: String,
-    default: "Dr. Founder Name"
-  },
-  trainerSign: {
-    type: String,
-    default: "Lead Trainer"
-  },
-  // Trainer-specific fields
-  specialization: String,
-  experience: {
-    type: String,
-    default: "Professional"
-  },
-  certificationLevel: {
-    type: String,
-    default: "Certified Trainer"
-  },
-  validUntil: Date,
   qrCodeUrl: {
     type: String,
     required: true

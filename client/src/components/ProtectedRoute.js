@@ -7,6 +7,21 @@ export const ProtectedRoute = ({ children, requireVerification = false, requireR
   const { isAuthenticated, isLoading, user, isInitialized } = useAuth();
   const location = useLocation();
 
+  // Developer Mode: Bypass authentication (set to true for development)
+  const DEVELOPER_MODE = process.env.REACT_APP_DEVELOPER_MODE === 'true' || process.env.NODE_ENV === 'development';
+  
+  if (DEVELOPER_MODE) {
+    // In developer mode, show a banner and allow access
+    return (
+      <div>
+        <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 text-center text-sm">
+          🚧 <strong>DEVELOPER MODE</strong> - Authentication bypassed for testing
+        </div>
+        {children}
+      </div>
+    );
+  }
+
   // Show loading while checking authentication
   if (!isInitialized || isLoading) {
     return (
@@ -39,6 +54,20 @@ export const ProtectedRoute = ({ children, requireVerification = false, requireR
 
 // Component for protecting admin routes
 export const AdminRoute = ({ children, requireVerification = true }) => {
+  // Developer Mode: Bypass authentication
+  const DEVELOPER_MODE = process.env.REACT_APP_DEVELOPER_MODE === 'true' || process.env.NODE_ENV === 'development';
+  
+  if (DEVELOPER_MODE) {
+    return (
+      <div>
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 text-center text-sm">
+          🔧 <strong>ADMIN DEV MODE</strong> - Admin access granted for testing
+        </div>
+        {children}
+      </div>
+    );
+  }
+
   return (
     <ProtectedRoute 
       requireVerification={requireVerification} 

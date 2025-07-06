@@ -10,10 +10,8 @@
     "install-server": "cd server && npm install",
     "install-client": "cd client && npm install",
     "install-all": "npm run install-server && npm run install-client",
-    "build": "npm run install-all && cd client && npm run build",
-    "start": "cd server && npm start",
-    "render-build": "npm run install-all && cd client && npm run build",
-    "render-start": "cd server && npm start"
+    "build": "cd client && npm run build",
+    "start": "cd server && npm start"
   },
   "keywords": ["certificate", "verification", "qr-code", "automation"],
   "author": "Your Name",
