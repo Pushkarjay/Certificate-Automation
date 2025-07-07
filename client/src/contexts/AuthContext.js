@@ -1,6 +1,9 @@
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
 import { authService } from '../services/authService';
 
+// Developer mode check
+const isDeveloperMode = process.env.NODE_ENV === 'development' && process.env.REACT_APP_DEVELOPER_MODE === 'true';
+
 // Auth action types
 const AUTH_ACTIONS = {
   LOGIN_START: 'LOGIN_START',
@@ -108,11 +111,30 @@ export const useAuth = () => {
 // AuthProvider component
 export const AuthProvider = ({ children }) => {
   const [state, dispatch] = useReducer(authReducer, initialState);
-
+  
   // Initialize auth on mount
   useEffect(() => {
     const initializeAuth = async () => {
       try {
+        // Developer mode bypass
+        if (isDeveloperMode) {
+          dispatch({
+            type: AUTH_ACTIONS.LOGIN_SUCCESS,
+            payload: {
+              token: 'dev-token',
+              refreshToken: 'dev-refresh-token',
+              user: {
+                id: 'dev-user',
+                email: 'developer@certifypro.com',
+                firstName: 'Developer',
+                lastName: 'Mode',
+                role: 'admin'
+              }
+            }
+          });
+          return;
+        }
+
         const token = localStorage.getItem('token');
         const refreshToken = localStorage.getItem('refreshToken');
         const user = JSON.parse(localStorage.getItem('user') || 'null');
