@@ -5,6 +5,7 @@ import { FaSearch, FaQrcode, FaSpinner } from 'react-icons/fa';
 import { certificateAPI } from '../services/api';
 import VerificationStatus from '../components/VerificationStatus';
 import CertificateDisplay from '../components/CertificateDisplay';
+import ModernCertificateDisplay from '../components/ModernCertificateDisplay';
 
 const VerifyCertificate = () => {
   const { dofNo: urlDofNo } = useParams();
@@ -161,10 +162,7 @@ const VerifyCertificate = () => {
       {/* Certificate Display */}
       {certificate && verificationStatus === 'verified' && (
         <div className="mb-8">
-          <h2 className="text-2xl font-bold text-center text-gray-900 mb-6">
-            Certificate Details
-          </h2>
-          <CertificateDisplay certificate={certificate} showQRCode={false} />
+          <ModernCertificateDisplay certificate={certificate} showQRCode={true} />
         </div>
       )}
 

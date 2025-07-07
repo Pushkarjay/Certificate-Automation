@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { FaArrowLeft, FaSpinner } from 'react-icons/fa';
 import { certificateAPI } from '../services/api';
-import CertificateDisplay from '../components/CertificateDisplay';
+import ModernCertificateDisplay from '../components/ModernCertificateDisplay';
 
 const CertificateView = () => {
   const { id } = useParams();
@@ -130,7 +130,7 @@ const CertificateView = () => {
 
       {/* Certificate Display */}
       <div className="print:shadow-none">
-        <CertificateDisplay certificate={certificate} showQRCode={true} />
+        <ModernCertificateDisplay certificate={certificate} showQRCode={true} />
       </div>
 
       {/* Certificate Metadata */}

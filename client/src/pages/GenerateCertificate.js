@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { toast } from 'react-toastify';
 import { FaUser, FaGraduationCap, FaHashtag, FaCalendarAlt, FaSpinner } from 'react-icons/fa';
 import { certificateAPI } from '../services/api';
-import CertificateDisplay from '../components/CertificateDisplay';
+import ModernCertificateDisplay from '../components/ModernCertificateDisplay';
 
 const GenerateCertificate = () => {
   const [formData, setFormData] = useState({
@@ -107,7 +107,7 @@ const GenerateCertificate = () => {
           </p>
         </div>
 
-        <CertificateDisplay certificate={generatedCertificate} />
+        <ModernCertificateDisplay certificate={generatedCertificate} />
 
         <div className="text-center mt-8 space-x-4">
           <button
