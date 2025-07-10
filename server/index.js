@@ -7,6 +7,7 @@ const path = require('path');
 require('dotenv').config();
 
 const certificateRoutes = require('./routes/certificates');
+const authRoutes = require('./routes/authMongo');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -38,6 +39,7 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/certifica
 .catch((err) => console.error('MongoDB connection error:', err));
 
 // Routes
+app.use('/api/auth', authRoutes);
 app.use('/api/certificates', certificateRoutes);
 
 // Serve static files from React build (for production)
