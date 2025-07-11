@@ -54,7 +54,7 @@ coverage/
 data/
 
 # Confidential files
-certificate-generator/
+Certificate-generator/
 confidential-templates/
 *.key
 *.pem
