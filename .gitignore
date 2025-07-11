@@ -55,6 +55,9 @@ data/
 
 # Confidential files
 certificate-generator/
+confidential-templates/
+*.key
+*.pem
 
 # Backup files
 *.backup

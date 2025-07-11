@@ -1,0 +1,4 @@
+easygui
+pillow
+pandas
+openpyxl==3.1.0
