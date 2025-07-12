@@ -4,6 +4,19 @@ const dbService = require('../services/databaseService');
 const { generateCertificate } = require('../services/certificateGenerator');
 const QRCode = require('qrcode');
 
+// Test endpoint to check API health
+router.get('/test', async (req, res) => {
+  try {
+    res.json({ 
+      status: 'OK', 
+      message: 'Certificates API is working',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Get all certificates with pagination (now working with form_submissions)
 router.get('/', async (req, res) => {
   try {
