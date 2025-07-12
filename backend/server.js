@@ -14,7 +14,40 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Middleware
-app.use(helmet());
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: [
+        "'self'",
+        "'unsafe-inline'", // Allow inline scripts for the admin dashboard
+        "'unsafe-eval'" // Allow eval for any dynamic content if needed
+      ],
+      styleSrc: [
+        "'self'",
+        "'unsafe-inline'" // Allow inline styles
+      ],
+      imgSrc: [
+        "'self'",
+        "data:",
+        "blob:",
+        "https:"
+      ],
+      connectSrc: [
+        "'self'",
+        "https://certificate-automation-dmoe.onrender.com"
+      ],
+      fontSrc: [
+        "'self'",
+        "data:"
+      ],
+      objectSrc: ["'none'"],
+      mediaSrc: ["'self'"],
+      frameSrc: ["'none'"]
+    }
+  },
+  crossOriginEmbedderPolicy: false // Disable COEP to avoid issues with blob URLs
+}));
 
 // CORS configuration for production
 const allowedOrigins = [
@@ -84,6 +117,19 @@ app.use(express.static(path.join(__dirname, '../Frontend/React/build')));
 // Serve admin dashboard
 app.use('/admin', express.static(path.join(__dirname, '../')));
 
+// Serve admin dashboard at root path when accessed with specific file
+app.get('/admin-dashboard.html', (req, res) => {
+  // Prevent caching to ensure latest version is always served
+  res.set({
+    'Cache-Control': 'no-cache, no-store, must-revalidate',
+    'Pragma': 'no-cache',
+    'Expires': '0',
+    // More permissive CSP for admin dashboard
+    'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; connect-src 'self' https://certificate-automation-dmoe.onrender.com; font-src 'self' data:; object-src 'none';"
+  });
+  res.sendFile(path.join(__dirname, '../admin-dashboard.html'));
+});
+
 // Performance monitoring setup
 performanceMonitor.on('performanceAlert', (alert) => {
   console.warn(`⚠️ Performance Alert: ${alert.message}`);
@@ -130,7 +176,9 @@ app.get('/admin-dashboard', (req, res) => {
   res.set({
     'Cache-Control': 'no-cache, no-store, must-revalidate',
     'Pragma': 'no-cache',
-    'Expires': '0'
+    'Expires': '0',
+    // More permissive CSP for admin dashboard
+    'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; connect-src 'self' https://certificate-automation-dmoe.onrender.com; font-src 'self' data:; object-src 'none';"
   });
   res.sendFile(path.join(__dirname, '../admin-dashboard.html'));
 });
