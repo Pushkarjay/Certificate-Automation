@@ -455,4 +455,94 @@ function convertToCSV(data) {
   return [csvHeaders, ...csvRows].join('\n');
 }
 
+// Manual sync endpoint for current Google Form responses
+router.post('/sync-current-forms', async (req, res) => {
+  try {
+    console.log('🔄 Starting manual sync of current Google Form responses...');
+    
+    const results = [];
+    
+    for (const response of responses) {
+      try {
+        // Check if this person already exists (by email)
+        const existingCheck = await dbService.query(
+          'SELECT submission_id FROM form_submissions WHERE email_address = $1',
+          [response.email_address]
+        );
+
+        if (existingCheck.rows.length > 0) {
+          results.push({
+            name: response.full_name,
+            success: false,
+            message: 'Already exists in database',
+            submissionId: existingCheck.rows[0].submission_id
+          });
+          continue;
+        }
+
+        // Insert new submission
+        const insertQuery = `
+          INSERT INTO form_submissions (
+            title, full_name, email_address, phone, gender, date_of_birth,
+            course_name, batch_initials, start_date, end_date, gpa,
+            certificate_type, form_source, status, created_at, updated_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+          RETURNING submission_id
+        `;
+        
+        const values = [
+          response.title, response.full_name, response.email_address, 
+          response.phone, response.gender, response.date_of_birth,
+          response.course_name, response.batch_initials, response.start_date, 
+          response.end_date, response.gpa, response.certificate_type, 
+          response.form_source, 'pending', new Date(), new Date()
+        ];
+        
+        const result = await dbService.query(insertQuery, values);
+        results.push({
+          name: response.full_name,
+          submissionId: result.rows[0].submission_id,
+          success: true,
+          message: 'Successfully added to database'
+        });
+
+        console.log(`✅ Added: ${response.full_name} (ID: ${result.rows[0].submission_id})`);
+        
+      } catch (error) {
+        console.error(`❌ Failed to add ${response.full_name}:`, error);
+        results.push({
+          name: response.full_name,
+          success: false,
+          error: error.message
+        });
+      }
+    }
+
+    const successful = results.filter(r => r.success).length;
+    const failed = results.filter(r => !r.success).length;
+
+    console.log(`🎉 Manual sync completed: ${successful} successful, ${failed} failed`);
+
+    res.json({
+      success: true,
+      message: 'Manual sync completed',
+      results: results,
+      summary: {
+        totalProcessed: responses.length,
+        successful: successful,
+        failed: failed,
+        alreadyExists: results.filter(r => r.message?.includes('Already exists')).length
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Manual sync error:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Manual sync failed', 
+      details: error.message 
+    });
+  }
+});
+
 module.exports = router;

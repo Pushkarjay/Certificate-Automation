@@ -173,6 +173,7 @@
             
             <button onclick="loadCertificates()">🔄 Refresh</button>
             <button onclick="generateAllPending()" class="generate">⚡ Generate All Pending</button>
+            <button onclick="syncGoogleForms()" style="background: #17a2b8; color: white;">📥 Sync Google Forms</button>
             <button onclick="testAPI()" style="background: #ffc107; color: #000;">🔧 Test API</button>
         </div>
         
@@ -437,6 +438,44 @@
                 setTimeout(() => {
                     messageDiv.innerHTML = '';
                 }, 5000);
+            }
+        }
+        
+        // Sync Google Form responses
+        async function syncGoogleForms() {
+            if (!confirm('This will import the current 3 Google Form responses (PUSHKARJAY AJAY, ghugk, bhavya singh ajay). Continue?')) {
+                return;
+            }
+            
+            try {
+                showMessage('🔄 Syncing Google Form responses...', 'loading');
+                
+                const response = await fetch(`${API_BASE}/admin/sync-current-forms`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                console.log('Sync result:', data);
+                
+                if (response.ok && data.success) {
+                    const { summary } = data;
+                    showMessage(
+                        `✅ Sync completed! Added: ${summary.successful}, Already existed: ${summary.alreadyExists}, Failed: ${summary.failed}`,
+                        'success'
+                    );
+                    
+                    // Refresh data
+                    loadCertificates();
+                    loadStats();
+                } else {
+                    showMessage(`❌ Sync failed: ${data.error || data.message}`, 'error');
+                }
+            } catch (error) {
+                console.error('Error syncing forms:', error);
+                showMessage('❌ Error syncing Google Forms: ' + error.message, 'error');
             }
         }
         
