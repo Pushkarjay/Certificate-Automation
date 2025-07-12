@@ -4,8 +4,8 @@
  */
 
 // Configuration - Replace with your actual values
-const WEBHOOK_URL = 'http://localhost:5000/api/forms/submit'; // Your backend endpoint
-const DATABASE_API_KEY = 'your-api-key-here'; // For authentication
+const WEBHOOK_URL = process.env.WEBHOOK_URL || 'http://localhost:3000/api/forms/submit'; // Your backend endpoint
+const DATABASE_API_KEY = process.env.DATABASE_API_KEY || 'your-api-key-here'; // For authentication
 
 /**
  * This function is triggered when a form is submitted

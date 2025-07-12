@@ -58,7 +58,7 @@ Create three separate Google Forms for different certificate types:
 
 1. Open your Google Form
 2. Click the three dots menu → Script editor
-3. Delete the default code and paste the content from `google-apps-script.js`
+3. Delete the default code and paste the content from `Sheet/google-apps-script.js`
 4. Update the configuration variables:
    - `WEBHOOK_URL`: Your backend server URL
    - `DATABASE_API_KEY`: Your API authentication key
