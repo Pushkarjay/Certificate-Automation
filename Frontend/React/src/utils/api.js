@@ -72,7 +72,13 @@ export const certificateAPI = {
       responseType: 'blob'
     });
     return response.data;
-  }
+  },
+
+  // Manual verification by details
+  manualVerify: async (details) => {
+    const response = await api.post('/certificates/verify/manual', details);
+    return response.data;
+  },
 };
 
 export default api;

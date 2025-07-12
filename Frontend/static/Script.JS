@@ -237,6 +237,16 @@ function generateCertificateDetailsHTML(certData) {
                 <span class="detail-value">${formatDate(certData.issuedDate)}</span>
             </div>
         </div>
+        
+        <!-- Action Buttons (React-style features) -->
+        <div class="action-buttons" style="margin-top: 2rem; display: flex; gap: 1rem; justify-content: center;">
+            <button onclick="viewCertificate('${certData.referenceNumber}')" class="action-btn view-btn" style="background: linear-gradient(135deg, #667eea, #764ba2); color: white; border: none; padding: 0.75rem 1.5rem; border-radius: 8px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 0.5rem;">
+                👁️ View Certificate
+            </button>
+            <button onclick="downloadCertificate('${certData.referenceNumber}')" class="action-btn download-btn" style="background: linear-gradient(135deg, #10b981, #059669); color: white; border: none; padding: 0.75rem 1.5rem; border-radius: 8px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 0.5rem;">
+                📥 Download
+            </button>
+        </div>
     `;
 }
 
@@ -355,6 +365,143 @@ async function verifyManualCertificate(name, course, email) {
         console.error('Manual verification error:', error);
         showError('Unable to perform manual verification. Please check your connection and try again.');
     }
+}
+
+/**
+ * View certificate (React-style feature added to static)
+ */
+function viewCertificate(referenceNumber) {
+    // Create a modal to display certificate information
+    const modal = document.createElement('div');
+    modal.id = 'certificateModal';
+    modal.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.8);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+    `;
+    
+    modal.innerHTML = `
+        <div style="background: white; padding: 2rem; border-radius: 12px; max-width: 600px; width: 90%; max-height: 80%; overflow-y: auto;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <h3>Certificate Preview</h3>
+                <button onclick="closeCertificateModal()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer;">✕</button>
+            </div>
+            <div style="text-align: center; padding: 2rem; border: 2px solid #e2e8f0; border-radius: 8px;">
+                <h2 style="color: #667eea; margin-bottom: 1rem;">🎓 SURE Trust Certificate</h2>
+                <p><strong>Reference:</strong> ${referenceNumber}</p>
+                <p style="margin-top: 1rem; color: #666;">Certificate preview will be enhanced with actual certificate image in full implementation.</p>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+}
+
+/**
+ * Close certificate modal
+ */
+function closeCertificateModal() {
+    const modal = document.getElementById('certificateModal');
+    if (modal) {
+        document.body.removeChild(modal);
+    }
+}
+
+/**
+ * Download certificate (React-style feature added to static)
+ */
+async function downloadCertificate(referenceNumber) {
+    try {
+        showMessage('Preparing download...', 'info');
+        
+        // In a full implementation, this would download the actual certificate file
+        // For now, we'll create a simple text file with certificate info
+        const response = await fetch(`${CONFIG.API_BASE_URL}${CONFIG.VERIFICATION_ENDPOINT}/${referenceNumber}`);
+        const data = await response.json();
+        
+        if (data.valid && data.certificateData) {
+            const certificateText = `
+SURE Trust Certificate
+======================
+
+Reference Number: ${data.certificateData.referenceNumber}
+Certificate Holder: ${data.certificateData.holderName}
+Email: ${data.certificateData.email}
+Course: ${data.certificateData.course}
+Batch: ${data.certificateData.batch}
+GPA: ${data.certificateData.gpa || 'N/A'}
+Issued Date: ${formatDate(data.certificateData.issuedDate)}
+
+This certificate is valid and authentic.
+Verification URL: ${data.certificateData.verificationUrl || window.location.href}
+
+© 2025 SURE Trust. All rights reserved.
+            `;
+            
+            const blob = new Blob([certificateText], { type: 'text/plain' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `certificate-${referenceNumber}.txt`;
+            a.click();
+            window.URL.revokeObjectURL(url);
+            
+            showMessage('Certificate downloaded successfully!', 'success');
+        } else {
+            showMessage('Failed to download certificate', 'error');
+        }
+    } catch (error) {
+        console.error('Download error:', error);
+        showMessage('Failed to download certificate', 'error');
+    }
+}
+
+/**
+ * Show message notification (like React toast)
+ */
+function showMessage(message, type = 'info') {
+    const notification = document.createElement('div');
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 1rem 1.5rem;
+        border-radius: 8px;
+        color: white;
+        font-weight: 600;
+        z-index: 1001;
+        animation: slideIn 0.3s ease;
+        ${type === 'success' ? 'background: #10b981;' : ''}
+        ${type === 'error' ? 'background: #ef4444;' : ''}
+        ${type === 'info' ? 'background: #3b82f6;' : ''}
+    `;
+    
+    notification.textContent = message;
+    document.body.appendChild(notification);
+    
+    // Add animation styles
+    const style = document.createElement('style');
+    style.textContent = `
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+    `;
+    document.head.appendChild(style);
+    
+    // Remove after 3 seconds
+    setTimeout(() => {
+        if (notification.parentNode) {
+            notification.parentNode.removeChild(notification);
+        }
+    }, 3000);
 }
 
 // Export functions for testing (if needed)

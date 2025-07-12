@@ -472,4 +472,90 @@ router.get('/verify/:refNo', async (req, res) => {
   }
 });
 
+// Manual verification by certificate details
+router.post('/verify/manual', async (req, res) => {
+  try {
+    const { holderName, course, email } = req.body;
+    
+    if (!holderName || !course || !email) {
+      return res.status(400).json({
+        valid: false,
+        error: 'Missing required fields',
+        message: 'Please provide holder name, course, and email address.'
+      });
+    }
+
+    const query = `
+      SELECT 
+        fs.full_name,
+        fs.email_address,
+        fs.course_name,
+        fs.batch_initials,
+        fs.certificate_type,
+        fs.gpa,
+        fs.attendance_percentage,
+        fs.start_date,
+        fs.end_date,
+        cg.certificate_ref_no,
+        cg.verification_url,
+        cg.generated_at,
+        cg.status
+      FROM form_submissions fs
+      LEFT JOIN certificate_generations cg ON fs.submission_id = cg.submission_id
+      WHERE LOWER(fs.full_name) = LOWER($1) 
+      AND LOWER(fs.course_name) = LOWER($2)
+      AND LOWER(fs.email_address) = LOWER($3)
+      AND cg.certificate_ref_no IS NOT NULL
+    `;
+    
+    const result = await dbService.query(query, [holderName, course, email]);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        valid: false,
+        error: 'Certificate not found',
+        message: 'No certificate found matching the provided details.'
+      });
+    }
+
+    const cert = result.rows[0];
+
+    // Update verification count
+    if (cert.certificate_ref_no) {
+      await dbService.query(
+        'UPDATE certificate_generations SET verification_count = verification_count + 1, last_verified = CURRENT_TIMESTAMP WHERE certificate_ref_no = $1',
+        [cert.certificate_ref_no]
+      );
+    }
+
+    res.json({
+      valid: true,
+      status: 'valid',
+      message: 'Certificate is valid and authentic.',
+      certificateData: {
+        referenceNumber: cert.certificate_ref_no,
+        certificateType: cert.certificate_type,
+        holderName: cert.full_name,
+        email: cert.email_address,
+        course: cert.course_name,
+        batch: cert.batch_initials,
+        gpa: cert.gpa,
+        attendance: cert.attendance_percentage,
+        startDate: cert.start_date,
+        endDate: cert.end_date,
+        issuedDate: cert.generated_at,
+        verificationUrl: cert.verification_url
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Error in manual verification:', error);
+    res.status(500).json({
+      valid: false,
+      error: 'Verification failed',
+      message: 'An error occurred while verifying the certificate.'
+    });
+  }
+});
+
 module.exports = router;

@@ -206,6 +206,12 @@ function CertificateVerification() {
   const navigate = useNavigate();
   const [searchRefNo, setSearchRefNo] = useState(refNo || '');
   const [showCertificate, setShowCertificate] = useState(false);
+  const [manualForm, setManualForm] = useState({
+    name: '',
+    course: '',
+    email: ''
+  });
+  const [loading, setLoading] = useState(false);
 
   const { data: certificateData, isLoading, error, refetch } = useQuery(
     ['certificate', searchRefNo],
@@ -260,6 +266,32 @@ function CertificateVerification() {
       }
     } catch (error) {
       toast.error('Failed to download certificate');
+    }
+  };
+
+  const handleManualVerification = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    
+    try {
+      const response = await certificateAPI.manualVerify({
+        holderName: manualForm.name,
+        course: manualForm.course,
+        email: manualForm.email
+      });
+      
+      if (response.valid) {
+        toast.success('Certificate verified successfully!');
+        // Update the search to show the found certificate
+        setSearchRefNo(response.certificateData.referenceNumber);
+        navigate(`/verify/${response.certificateData.referenceNumber}`);
+      } else {
+        toast.error(response.message || 'Certificate verification failed');
+      }
+    } catch (error) {
+      toast.error('Failed to verify certificate manually');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -397,6 +429,127 @@ function CertificateVerification() {
             )}
           </Card>
         )}
+
+        {/* Manual Verification Form */}
+        <Card
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+        >
+          <h3 style={{ marginBottom: '1rem', color: '#334155' }}>Manual Certificate Check</h3>
+          <p style={{ marginBottom: '1.5rem', color: '#64748b' }}>
+            You can also manually verify certificates by entering the certificate details below:
+          </p>
+          
+          <form onSubmit={handleManualVerification}>
+            <div style={{ marginBottom: '1rem' }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
+                Certificate Holder Name:
+              </label>
+              <input
+                type="text"
+                value={manualForm.name}
+                onChange={(e) => setManualForm({...manualForm, name: e.target.value})}
+                placeholder="Enter full name"
+                style={{
+                  width: '100%',
+                  padding: '0.75rem',
+                  border: '2px solid #e2e8f0',
+                  borderRadius: '8px',
+                  fontSize: '1rem'
+                }}
+              />
+            </div>
+            
+            <div style={{ marginBottom: '1rem' }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
+                Course Name:
+              </label>
+              <input
+                type="text"
+                value={manualForm.course}
+                onChange={(e) => setManualForm({...manualForm, course: e.target.value})}
+                placeholder="Enter course name"
+                style={{
+                  width: '100%',
+                  padding: '0.75rem',
+                  border: '2px solid #e2e8f0',
+                  borderRadius: '8px',
+                  fontSize: '1rem'
+                }}
+              />
+            </div>
+            
+            <div style={{ marginBottom: '1.5rem' }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
+                Email Address:
+              </label>
+              <input
+                type="email"
+                value={manualForm.email}
+                onChange={(e) => setManualForm({...manualForm, email: e.target.value})}
+                placeholder="Enter email address"
+                style={{
+                  width: '100%',
+                  padding: '0.75rem',
+                  border: '2px solid #e2e8f0',
+                  borderRadius: '8px',
+                  fontSize: '1rem'
+                }}
+              />
+            </div>
+            
+            <button
+              type="submit"
+              disabled={loading}
+              style={{
+                background: 'linear-gradient(135deg, #667eea, #764ba2)',
+                color: 'white',
+                border: 'none',
+                padding: '0.75rem 1.5rem',
+                borderRadius: '8px',
+                fontSize: '1rem',
+                fontWeight: '600',
+                cursor: 'pointer',
+                width: '100%'
+              }}
+            >
+              Manual Verification
+            </button>
+          </form>
+        </Card>
+
+        {/* How to Verify Instructions */}
+        <Card
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+        >
+          <h3 style={{ marginBottom: '1rem', color: '#334155' }}>How to Verify</h3>
+          <ol style={{ paddingLeft: '1.5rem', color: '#64748b', lineHeight: '1.6' }}>
+            <li>Enter your certificate reference number in the field above</li>
+            <li>Click "Verify Certificate" button</li>
+            <li>View your certificate details and verification status</li>
+          </ol>
+          
+          <h3 style={{ margin: '2rem 0 1rem', color: '#334155' }}>QR Code Verification</h3>
+          <p style={{ color: '#64748b', lineHeight: '1.6' }}>
+            You can also verify certificates by scanning the QR code on your certificate using your mobile device.
+          </p>
+          
+          <div style={{ 
+            marginTop: '2rem', 
+            padding: '1rem', 
+            background: '#f8fafc', 
+            borderRadius: '8px',
+            textAlign: 'center'
+          }}>
+            <p style={{ margin: '0', color: '#64748b', fontSize: '0.9rem' }}>
+              © 2025 SURE Trust. All rights reserved.<br />
+              For support, contact: support@suretrust.org
+            </p>
+          </div>
+        </Card>
       </AnimatePresence>
 
       {showCertificate && certificateData?.certificateData && (
