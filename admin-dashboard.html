@@ -208,9 +208,17 @@
         
         // Load dashboard on page load
         window.onload = function() {
+            console.log('🚀 Dashboard loading...');
             loadStats();
             loadCertificates();
         };
+        
+        // Auto-refresh every 30 seconds to show new submissions
+        setInterval(function() {
+            console.log('🔄 Auto-refreshing dashboard...');
+            loadStats();
+            loadCertificates();
+        }, 30000);
         
         // Load statistics
         async function loadStats() {
@@ -268,7 +276,7 @@
         // Fallback: Calculate stats from certificates list
         async function loadStatsFromCertificates() {
             try {
-                const response = await fetch(`${API_BASE}/certificates?limit=1000`);
+                const response = await fetch(`${API_BASE}/certificates?limit=1000&_t=${Date.now()}`); // Add cache-busting
                 if (!response.ok) throw new Error('Failed to load certificates');
                 
                 const data = await response.json();
@@ -318,7 +326,7 @@
             const typeFilter = document.getElementById('typeFilter').value;
             const statusFilter = document.getElementById('statusFilter').value;
             
-            let url = `${API_BASE}/certificates?limit=100`;
+            let url = `${API_BASE}/certificates?limit=100&_t=${Date.now()}`; // Add timestamp to prevent caching
             if (typeFilter) url += `&type=${typeFilter}`;
             if (statusFilter) url += `&status=${statusFilter}`;
             
