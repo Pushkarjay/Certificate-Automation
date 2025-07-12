@@ -136,44 +136,79 @@ router.get('/:id', async (req, res) => {
 router.post('/generate/:id', async (req, res) => {
   try {
     const submissionId = req.params.id;
+    const forceRegenerate = req.query.force === 'true' || req.body.force === true;
     
     // Get form submission data
     const submissionQuery = `
       SELECT * FROM form_submissions 
-      WHERE submission_id = $1 AND status = 'pending'
+      WHERE submission_id = $1
     `;
     
     const submissionResult = await dbService.query(submissionQuery, [submissionId]);
     
     if (submissionResult.rows.length === 0) {
       return res.status(404).json({ 
-        error: 'Form submission not found or not in pending status' 
+        error: 'Form submission not found' 
       });
     }
 
     const submission = submissionResult.rows[0];
 
-    // Check if certificate already exists
+    // Initialize variables
+    let refNo;
+    let verificationUrl;
+
+    // Check if certificate already exists and has actual files
     const existingCertQuery = `
-      SELECT certificate_ref_no FROM certificate_generations 
+      SELECT certificate_ref_no, certificate_image_path, certificate_pdf_path 
+      FROM certificate_generations 
       WHERE submission_id = $1
     `;
     
     const existingResult = await dbService.query(existingCertQuery, [submissionId]);
     
-    if (existingResult.rows.length > 0) {
-      return res.status(400).json({ 
-        error: 'Certificate already generated',
-        referenceNumber: existingResult.rows[0].certificate_ref_no
-      });
+    if (existingResult.rows.length > 0 && !forceRegenerate) {
+      const existing = existingResult.rows[0];
+      
+      // Check if actual files exist
+      const fs = require('fs').promises;
+      const path = require('path');
+      let filesExist = false;
+      
+      try {
+        if (existing.certificate_image_path && existing.certificate_pdf_path) {
+          const imgPath = path.join(__dirname, '..', existing.certificate_image_path);
+          const pdfPath = path.join(__dirname, '..', existing.certificate_pdf_path);
+          
+          await fs.access(imgPath);
+          await fs.access(pdfPath);
+          filesExist = true;
+        }
+      } catch (error) {
+        console.log(`📂 Certificate files missing for ${existing.certificate_ref_no}, allowing re-generation`);
+        filesExist = false;
+      }
+      
+      if (filesExist) {
+        return res.status(400).json({ 
+          error: 'Certificate already generated with files',
+          referenceNumber: existing.certificate_ref_no,
+          message: 'Certificate files already exist. Use force=true to regenerate.'
+        });
+      } else {
+        console.log(`🔄 Re-generating certificate ${existing.certificate_ref_no} (files missing)`);
+        // Continue with generation using existing reference number
+        refNo = existing.certificate_ref_no;
+        verificationUrl = `${process.env.VERIFICATION_BASE_URL || 'https://certificate-automation-dmoe.onrender.com/verify/'}${refNo}`;
+      }
+    } else {
+      // Generate new certificate reference number and verification URL
+      refNo = await generateCertificateRefNo(submission);
+      verificationUrl = `${process.env.VERIFICATION_BASE_URL || 'https://certificate-automation-dmoe.onrender.com/verify/'}${refNo}`;
     }
 
-    // Generate certificate reference number
-    const refNo = await generateCertificateRefNo(submission);
-
     // Generate QR code
-    const verificationUrl = `${process.env.VERIFICATION_BASE_URL || 'https://certificate-automation-dmoe.onrender.com/verify/'}${refNo}`;
-    const qrCodeData = await QRCode.toDataURL(verificationUrl);
+    const qrCodeData = await QRCode.toDataURL(verificationUrl || `${process.env.VERIFICATION_BASE_URL || 'https://certificate-automation-dmoe.onrender.com/verify/'}${refNo}`);
 
     // Get appropriate template
     const templateQuery = `
@@ -209,20 +244,39 @@ router.post('/generate/:id', async (req, res) => {
 
     const generatedFiles = await generateSimpleCertificate(certificateData);
 
-    // Store certificate generation record
-    const insertCertQuery = `
-      INSERT INTO certificate_generations (
-        submission_id, certificate_ref_no, verification_url, qr_code_data,
-        certificate_image_path, certificate_pdf_path, template_id,
-        generated_at, status
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, 'generated')
-      RETURNING certificate_id
-    `;
+    // Store or update certificate generation record
+    let certResult;
+    if (existingResult.rows.length > 0) {
+      // Update existing certificate record with new file paths
+      const updateCertQuery = `
+        UPDATE certificate_generations SET
+          verification_url = $1, qr_code_data = $2,
+          certificate_image_path = $3, certificate_pdf_path = $4,
+          generated_at = CURRENT_TIMESTAMP, status = 'generated'
+        WHERE submission_id = $5
+        RETURNING certificate_id
+      `;
 
-    const certResult = await dbService.query(insertCertQuery, [
-      submissionId, refNo, verificationUrl, qrCodeData,
-      generatedFiles.imagePath, generatedFiles.pdfPath, templateId
-    ]);
+      certResult = await dbService.query(updateCertQuery, [
+        verificationUrl, qrCodeData,
+        generatedFiles.imagePath, generatedFiles.pdfPath, submissionId
+      ]);
+    } else {
+      // Insert new certificate record
+      const insertCertQuery = `
+        INSERT INTO certificate_generations (
+          submission_id, certificate_ref_no, verification_url, qr_code_data,
+          certificate_image_path, certificate_pdf_path, template_id,
+          generated_at, status
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, 'generated')
+        RETURNING certificate_id
+      `;
+
+      certResult = await dbService.query(insertCertQuery, [
+        submissionId, refNo, verificationUrl, qrCodeData,
+        generatedFiles.imagePath, generatedFiles.pdfPath, templateId
+      ]);
+    }
 
     // Update form submission status
     await dbService.query(
