@@ -150,6 +150,9 @@
 <body>
     <div class="container">
         <h1>🎓 Certificate Admin Dashboard</h1>
+        <div style="text-align: center; color: #666; margin-bottom: 20px; font-size: 14px;">
+            Last updated: <span id="lastUpdated"></span>
+        </div>
         
         <div class="stats" id="stats">
             <!-- Stats will be loaded here -->
@@ -172,6 +175,7 @@
             </select>
             
             <button onclick="loadCertificates()">🔄 Refresh</button>
+            <button onclick="forceRefresh()" style="background: #dc3545; color: white;">🔄 Force Refresh</button>
             <button onclick="generateAllPending()" class="generate">⚡ Generate All Pending</button>
             <button onclick="syncGoogleForms()" style="background: #17a2b8; color: white;">📥 Sync Google Forms</button>
             <button onclick="testAPI()" style="background: #ffc107; color: #000;">🔧 Test API</button>
@@ -209,13 +213,20 @@
         // Load dashboard on page load
         window.onload = function() {
             console.log('🚀 Dashboard loading...');
+            updateTimestamp();
             loadStats();
             loadCertificates();
         };
         
+        // Update timestamp
+        function updateTimestamp() {
+            document.getElementById('lastUpdated').textContent = new Date().toLocaleString();
+        }
+        
         // Auto-refresh every 30 seconds to show new submissions
         setInterval(function() {
             console.log('🔄 Auto-refreshing dashboard...');
+            updateTimestamp();
             loadStats();
             loadCertificates();
         }, 30000);
@@ -516,6 +527,21 @@
                 console.error('Error syncing forms:', error);
                 showMessage('❌ Error syncing Google Forms: ' + error.message, 'error');
             }
+        }
+        
+        // Force refresh function to bypass all caches
+        function forceRefresh() {
+            // Clear browser cache for this page
+            if ('caches' in window) {
+                caches.keys().then(function(names) {
+                    names.forEach(function(name) {
+                        caches.delete(name);
+                    });
+                });
+            }
+            
+            // Force reload with cache bypass
+            window.location.reload(true);
         }
         
         // Test API connectivity

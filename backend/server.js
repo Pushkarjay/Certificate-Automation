@@ -126,6 +126,12 @@ app.get('/health', (req, res) => {
 
 // Serve admin dashboard
 app.get('/admin-dashboard', (req, res) => {
+  // Prevent caching to ensure latest version is always served
+  res.set({
+    'Cache-Control': 'no-cache, no-store, must-revalidate',
+    'Pragma': 'no-cache',
+    'Expires': '0'
+  });
   res.sendFile(path.join(__dirname, '../admin-dashboard.html'));
 });
 
