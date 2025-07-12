@@ -616,9 +616,7 @@
         
         // Sync Google Form responses
         async function syncGoogleForms() {
-            if (!confirm('This will import the current 3 Google Form responses (PUSHKARJAY AJAY, ghugk, bhavya singh ajay). Continue?')) {
-                return;
-            }
+            // Sync Google Form data by fetching from Google Sheets via API/editor access
             
             try {
                 showMessage('🔄 Syncing Google Form responses...', 'loading');

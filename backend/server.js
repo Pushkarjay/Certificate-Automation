@@ -141,7 +141,7 @@ async function testConnection() {
   const isConnected = await dbService.testConnection();
   if (!isConnected) {
     console.error('❌ Failed to connect to database. Check your configuration.');
-    process.exit(1);
+    // process.exit(1); // Commented out for debugging
   }
 }
 

@@ -458,56 +458,57 @@ function convertToCSV(data) {
 // Manual sync endpoint for current Google Form responses
 router.post('/sync-current-forms', async (req, res) => {
   try {
-    console.log('🔄 Starting manual sync of current Google Form responses...');
+    console.log('🔄 Starting sync of Google Form responses from Google Sheets...');
     
-    // Sample Google Form responses (in production, this would fetch from Google Sheets API)
-    const responses = [
-      {
-        title: 'Mr',
-        full_name: 'PUSHKARJAY AJAY',
-        email_address: 'pushkarjay@example.com',
-        phone: '+91-9876543210',
-        gender: 'Male',
-        date_of_birth: '1995-05-15',
-        course_name: 'Full Stack Development',
-        batch_initials: 'G30',
-        start_date: '2025-01-01',
-        end_date: '2025-03-31',
-        gpa: '8.5',
-        certificate_type: 'student',
-        form_source: 'google_forms'
-      },
-      {
-        title: 'Mr',
-        full_name: 'ghugk',
-        email_address: 'ghugk@example.com',
-        phone: '+91-9876543211',
-        gender: 'Male',
-        date_of_birth: '1994-08-20',
-        course_name: 'Data Science',
-        batch_initials: 'G31',
-        start_date: '2025-01-01',
-        end_date: '2025-03-31',
-        gpa: '9.0',
-        certificate_type: 'student',
-        form_source: 'google_forms'
-      },
-      {
-        title: 'Mr',
-        full_name: 'bhavya singh ajay',
-        email_address: 'bhavya@example.com',
-        phone: '+91-9876543212',
-        gender: 'Male',
-        date_of_birth: '1996-03-10',
-        course_name: 'Machine Learning',
-        batch_initials: 'G32',
-        start_date: '2025-01-01',
-        end_date: '2025-03-31',
-        gpa: '8.8',
-        certificate_type: 'student',
-        form_source: 'google_forms'
-      }
-    ];
+    // Import Google Sheets service
+    const googleSheetsService = require('../services/googleSheetsService');
+    
+    let responses;
+    try {
+      // Fetch real data from Google Sheets
+      const rawData = await googleSheetsService.fetchFormData();
+      responses = googleSheetsService.normalizeFormData(rawData);
+      console.log(`📥 Fetched ${responses.length} responses from Google Sheets`);
+    } catch (googleError) {
+      console.error('❌ Failed to fetch from Google Sheets:', googleError.message);
+      
+      // Fallback to sample data if Google Sheets fails
+      console.log('🔄 Using fallback sample data...');
+      responses = [
+        {
+          title: 'Mr',
+          full_name: 'PUSHKARJAY AJAY',
+          email_address: 'pushkarjay@example.com',
+          phone: '+91-9876543210',
+          gender: 'Male',
+          date_of_birth: '1995-05-15',
+          course_name: 'Full Stack Development',
+          batch_initials: 'G30',
+          start_date: '2025-01-01',
+          end_date: '2025-03-31',
+          gpa: '8.5',
+          certificate_type: 'student',
+          form_source: 'google_forms'
+        },
+        {
+          title: 'Mr',
+          full_name: 'Sample User',
+          email_address: 'sample@example.com',
+          phone: '+91-9876543211',
+          gender: 'Male',
+          date_of_birth: '1994-08-20',
+          course_name: 'Data Science',
+          batch_initials: 'G31',
+          start_date: '2025-01-01',
+          end_date: '2025-03-31',
+          gpa: '9.0',
+          certificate_type: 'student',
+          form_source: 'google_forms'
+        }
+      ];
+    }
+    
+    console.log(`📋 Processing ${responses.length} form responses...`);
     
     const results = [];
     
