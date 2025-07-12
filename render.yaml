@@ -14,6 +14,8 @@ services:
         value: production
       - key: PORT
         value: 10000
+      - key: DB_TYPE
+        value: postgresql
       - key: DATABASE_URL
         value: postgresql://certificate_db_44nb_user:bjfK6mi1OXHXE0tYBw8YjtzrWOHX6EhM@dpg-d1p19f7fte5s73br93k0-a.oregon-postgres.render.com/certificate_db_44nb
       - key: FRONTEND_URL
