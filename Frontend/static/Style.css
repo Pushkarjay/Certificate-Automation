@@ -95,6 +95,24 @@ main {
     box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 }
 
+/* Help text styles */
+.help-text {
+    display: block;
+    margin-top: 0.25rem;
+    font-size: 0.9rem;
+    color: #64748b;
+    font-weight: normal;
+}
+
+.example-text {
+    display: block;
+    margin-top: 0.25rem;
+    font-size: 0.85rem;
+    color: #94a3b8;
+    font-style: italic;
+    font-weight: normal;
+}
+
 .verify-btn {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
