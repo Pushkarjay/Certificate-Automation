@@ -7,13 +7,13 @@ services:
     name: certificate-automation
     env: node
     plan: free
-    buildCommand: |
-      cd Backend && npm install &&
-      cd ../Frontend/React && npm install && npm run build
+    buildCommand: echo "Directory structure check..." && pwd && ls -la && echo "Installing root dependencies..." && npm install && echo "Installing frontend dependencies..." && cd Frontend/React && npm install && npm run build && echo "Build completed!"
     startCommand: cd Backend && npm start
     envVars:
       - key: NODE_ENV
         value: production
+      - key: PORT
+        value: 10000
       - key: DATABASE_URL
         fromDatabase:
           name: certificate-db
@@ -28,6 +28,12 @@ services:
         value: Backend/Generated-Certificates/
       - key: FONT_PATH
         value: Backend/Certificate_Templates/fonts/
+      - key: SECRET_KEY
+        value: production-secret-key-change-this
+      - key: JWT_SECRET
+        value: jwt-secret-key-change-this
+      - key: BCRYPT_ROUNDS
+        value: 12
     autoDeploy: true
 
 # Database

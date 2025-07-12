@@ -72,6 +72,7 @@ Google/Sheet/Sheet-API.JSON
 **/google-credentials.json
 **/service-account.json
 
-# Certificate Templates (Confidential)
-Certificate_Templates/
+# Certificate Templates (Keep sample templates, exclude sensitive ones)
+# Backend/Certificate_Templates/sensitive-*.jpg
+# Backend/Certificate_Templates/production-*.jpg
 confidential-templates/

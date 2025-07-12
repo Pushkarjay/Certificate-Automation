@@ -13,7 +13,7 @@ const SearchContainer = styled(motion.div)`
   margin-bottom: 2rem;
 `;
 
-const SearchForm = styled.form`
+const StyledForm = styled.form`
   display: flex;
   gap: 1rem;
   align-items: center;
@@ -111,7 +111,7 @@ function SearchForm({ onSearch, initialValue = '' }) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.6 }}
     >
-      <SearchForm onSubmit={handleSubmit}>
+      <StyledForm onSubmit={handleSubmit}>
         <SearchInput
           type="text"
           placeholder="Enter certificate reference number"
@@ -123,7 +123,7 @@ function SearchForm({ onSearch, initialValue = '' }) {
           <FiSearch />
           Verify
         </SearchButton>
-      </SearchForm>
+      </StyledForm>
       
       <HelpText>
         Enter the complete reference number found on your certificate
