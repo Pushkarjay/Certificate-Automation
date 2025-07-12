@@ -2,18 +2,40 @@
 
 A comprehensive digital certificate automation system that handles certificate generation, verification, and management through an integrated workflow.
 
-## 📁 Project Structure
+## 📁 Project Structure (SRS Compliant)
 
 ```
 Certificate-Automation/
-├── 📁 database/           # Database schema and scripts
-├── 📁 backend/           # Node.js API server
-├── 📁 frontend/          # React certificate verification portal
-├── 📁 google-forms/      # Google Forms integration
-├── 📁 confidential-templates/  # Private certificate templates
-├── .env                  # Environment configuration
-├── .gitignore           # Git ignore rules
-└── README.md            # This file
+├── 📁 Database/           # Database schemas and scripts (SRS Section 4.1)
+│   ├── Schema.SQL         # Main PostgreSQL schema
+│   ├── PostgreSQL/        # PostgreSQL-specific files
+│   ├── MySQL/            # MySQL-specific files
+│   └── MongoDB/          # MongoDB-specific files
+├── 📁 Google/             # Google integration (SRS FR1)
+│   ├── Form/             # Google Forms documentation
+│   ├── Sheet/            # Google Sheets API files
+│   └── README.md         # Google setup guide
+├── 📁 Frontend/          # Frontend applications (SRS FR5)
+│   ├── static/           # Static HTML/CSS/JS fallback
+│   │   ├── Index.html    # Static verification page
+│   │   ├── Style.css     # Styles
+│   │   └── Script.JS     # JavaScript functionality
+│   └── React/            # React application
+│       └── React-flow/   # React app structure
+├── 📁 Backend/           # Backend API server (SRS FR3)
+│   ├── Generated-Certificates/ # Certificate storage (SRS FR4)
+│   │   ├── PDF/          # PDF certificate files
+│   │   └── IMG/          # PNG certificate files
+│   ├── Certificate_Templates/ # Template files
+│   ├── .env              # Environment configuration
+│   └── API/              # RESTful API endpoints
+├── 📁 google-forms/      # Legacy Google Apps Script (deprecated)
+├── 📁 confidential-templates/ # Legacy template storage (deprecated)
+├── .env.example          # Environment template
+├── .env.srs-compliant    # SRS-compliant configuration
+├── validate-srs-compliance.js # SRS validation script
+├── SRS-COMPLIANCE-SUCCESS.md  # 100% compliance report
+└── README.md             # This file
 ```
 
 ## 🚀 Features
@@ -58,13 +80,13 @@ mysql -u root -p
 mysql> CREATE DATABASE certificate_automation;
 mysql> exit;
 
-mysql -u root -p certificate_automation < database/database_schema.sql
+mysql -u root -p certificate_automation < Database/MySQL/schema.sql
 ```
 
 ### 2. Backend Setup
 
 ```bash
-cd backend
+cd Backend
 npm install
 
 # Configure environment variables
@@ -78,7 +100,7 @@ npm run dev
 ### 3. Frontend Setup
 
 ```bash
-cd frontend
+cd Frontend/React
 npm install
 
 # Start development server
@@ -87,9 +109,9 @@ npm start
 
 ### 4. Google Forms Setup
 
-1. Create three Google Forms using the templates in `google-forms/`
+1. Create three Google Forms using the templates in `Google/Form/`
 2. Open Google Apps Script editor for each form
-3. Paste the code from `google-forms/google-apps-script.js`
+3. Paste the code from `Google/Sheet/google-apps-script.js`
 4. Configure the `CONFIG` object with your backend URL
 5. Set up form submission triggers
 
@@ -111,9 +133,9 @@ FRONTEND_URL=http://localhost:3001
 VERIFICATION_BASE_URL=https://certificates.suretrust.org/verify/
 
 # File Paths
-TEMPLATE_PATH=confidential-templates/
-CERTIFICATE_OUTPUT_PATH=backend/generated-certificates/
-FONT_PATH=confidential-templates/fonts/
+TEMPLATE_PATH=Backend/Certificate_Templates/
+CERTIFICATE_OUTPUT_PATH=Backend/Generated-Certificates/
+FONT_PATH=Backend/Certificate_Templates/fonts/
 
 # Security
 SECRET_KEY=your-secret-key-here
@@ -143,10 +165,10 @@ JWT_SECRET=your-jwt-secret-here
 
 ## 🎨 Certificate Templates
 
-Store your certificate templates in the `confidential-templates/` folder:
+Store your certificate templates in the `Backend/Certificate_Templates/` folder:
 
 ```
-confidential-templates/
+Backend/Certificate_Templates/
 ├── templates/
 │   ├── G28-Python.jpg
 │   ├── G15-VLSI.jpg
@@ -187,13 +209,13 @@ The verification portal is fully responsive and supports:
 
 ### Backend Tests
 ```bash
-cd backend
+cd Backend
 npm test
 ```
 
 ### Frontend Tests  
 ```bash
-cd frontend
+cd Frontend/React
 npm test
 ```
 
