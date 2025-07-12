@@ -23,6 +23,10 @@ const fs = require('fs').promises;
 const crypto = require('crypto');
 const QRCode = require('qrcode');
 
+// Log QRCode library info
+console.log('📦 QRCode library loaded:', typeof QRCode);
+console.log('📦 QRCode methods available:', Object.keys(QRCode));
+
 /**
  * Generate certificate in both IMG and PDF formats based on SRS requirements
  */
@@ -393,6 +397,11 @@ async function ensureDirectoryExists(dirPath) {
 async function generateSimpleCertificate(certificateData) {
   try {
     console.log('🔄 Starting simple certificate generation...');
+    console.log('📝 Certificate data received:', {
+      name: certificateData.name || certificateData.full_name,
+      course: certificateData.course || certificateData.course_name,
+      batch: certificateData.batch || certificateData.batch_initials
+    });
     
     // Clean production logic: ensure name, reference number, and output paths
     let name = certificateData.name || certificateData.full_name || '';
@@ -402,9 +411,13 @@ async function generateSimpleCertificate(certificateData) {
     
     const verificationUrl = certificateData.verificationUrl || `${process.env.VERIFICATION_BASE_URL || 'http://localhost:3000/verify/'}${refNo}`;
     
+    console.log('🔗 Generated verification URL:', verificationUrl);
+    console.log('📋 Reference number:', refNo);
+    
     // Generate QR code data URL with better error handling
     let qrCodeData = null;
     try {
+      console.log('🔄 Attempting QR code generation...');
       qrCodeData = await QRCode.toDataURL(verificationUrl, {
         width: 200,
         margin: 2,
@@ -415,8 +428,10 @@ async function generateSimpleCertificate(certificateData) {
         errorCorrectionLevel: 'M'
       });
       console.log('✅ QR code generated successfully');
+      console.log('📊 QR code data length:', qrCodeData ? qrCodeData.length : 0);
     } catch (qrError) {
-      console.warn('⚠️ QR code generation failed:', qrError.message);
+      console.error('❌ QR code generation failed:', qrError.message);
+      console.error('❌ QR error stack:', qrError.stack);
       qrCodeData = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='; // 1x1 transparent PNG
     }
     
@@ -746,7 +761,10 @@ function formatDate(dateString) {
  */
 async function addQRCodeToTemplate(ctx, refNo, verificationUrl, canvasWidth, canvasHeight) {
   try {
-    console.log('🔄 Generating QR code for:', verificationUrl);
+    console.log('🔄 Generating QR code for template...');
+    console.log('🔗 URL for QR:', verificationUrl);
+    console.log('📋 Reference:', refNo);
+    console.log('📐 Canvas dimensions:', canvasWidth, 'x', canvasHeight);
     
     // Generate QR code as buffer with improved settings
     const qrCodeBuffer = await QRCode.toBuffer(verificationUrl, {
@@ -760,20 +778,26 @@ async function addQRCodeToTemplate(ctx, refNo, verificationUrl, canvasWidth, can
       type: 'png'
     });
     
+    console.log('✅ QR code buffer generated, size:', qrCodeBuffer.length, 'bytes');
+    
     // Check if loadImage is available
     if (!loadImage) {
       console.warn('⚠️ loadImage not available, using fallback QR placeholder');
       throw new Error('loadImage not available');
     }
     
+    console.log('🖼️ Loading QR code as image...');
     // Load QR code as image
     const qrImage = await loadImage(qrCodeBuffer);
+    console.log('✅ QR image loaded successfully');
     
     // Position QR code in bottom-right corner with proper margin
     const qrSize = 100;
     const margin = 30;
     const qrX = canvasWidth - qrSize - margin;
     const qrY = canvasHeight - qrSize - margin;
+    
+    console.log('📍 QR position:', { x: qrX, y: qrY, size: qrSize });
     
     // Add white background behind QR code for better visibility
     ctx.fillStyle = 'white';
@@ -793,14 +817,17 @@ async function addQRCodeToTemplate(ctx, refNo, verificationUrl, canvasWidth, can
     ctx.textAlign = 'center';
     ctx.fillText(refNo, qrX + qrSize/2, qrY + qrSize + 15);
     
-    console.log('✅ QR code added to certificate template');
+    console.log('✅ QR code successfully added to certificate template');
   } catch (error) {
-    console.warn('⚠️ QR code generation failed:', error.message);
+    console.error('❌ QR code generation failed:', error.message);
+    console.error('❌ QR error stack:', error.stack);
     // Fallback: Draw placeholder QR area
     const qrSize = 100;
     const margin = 30;
     const qrX = canvasWidth - qrSize - margin;
     const qrY = canvasHeight - qrSize - margin;
+    
+    console.log('🔄 Drawing QR placeholder at:', { x: qrX, y: qrY, size: qrSize });
     
     // Draw white background
     ctx.fillStyle = 'white';
@@ -833,6 +860,8 @@ async function generateFallbackCertificate(certificateData, pdfPath, refNo, veri
     // Generate QR code as buffer first with enhanced settings
     let qrCodeBuffer = null;
     try {
+      console.log('🔄 Generating QR code buffer for fallback PDF...');
+      console.log('🔗 QR URL:', verificationUrl);
       qrCodeBuffer = await QRCode.toBuffer(verificationUrl, {
         width: 150,  // Increased size for better visibility
         margin: 2,   // More margin for better scanning
@@ -844,9 +873,10 @@ async function generateFallbackCertificate(certificateData, pdfPath, refNo, veri
         type: 'png',
         scale: 8  // Higher scale for crisp rendering
       });
-      console.log('✅ Enhanced QR code buffer generated for PDF');
+      console.log('✅ Enhanced QR code buffer generated for PDF, size:', qrCodeBuffer.length, 'bytes');
     } catch (qrError) {
-      console.warn('⚠️ QR code generation failed for PDF:', qrError.message);
+      console.error('❌ QR code generation failed for PDF:', qrError.message);
+      console.error('❌ QR error details:', qrError.stack);
     }
     
     // Create a simple PDF using PDFKit without canvas dependency

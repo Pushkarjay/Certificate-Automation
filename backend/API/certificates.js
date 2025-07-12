@@ -854,4 +854,52 @@ router.get('/test-revoke/:id?', async (req, res) => {
   }
 });
 
+// Direct certificate generation endpoint (for testing and API usage)
+router.post('/generate-direct', async (req, res) => {
+  try {
+    console.log('🔄 Direct certificate generation request received');
+    console.log('📝 Request body:', req.body);
+    
+    const certificateData = {
+      name: req.body.full_name || req.body.name,
+      course: req.body.course_name || req.body.course,
+      batch: req.body.batch_initials || req.body.batch,
+      type: req.body.certificate_type || 'completion',
+      startDate: req.body.start_date,
+      endDate: req.body.end_date,
+      gpa: req.body.gpa || '8.5'
+    };
+    
+    console.log('🎯 Processed certificate data:', certificateData);
+    
+    // Generate certificate using our enhanced system
+    const result = await generateSimpleCertificate(certificateData);
+    
+    console.log('✅ Certificate generation completed');
+    
+    // Return comprehensive response with QR code data
+    res.json({
+      success: true,
+      message: 'Certificate generated successfully via direct API',
+      certificateData: result.certificateData,
+      paths: {
+        imagePath: result.imagePath,
+        pdfPath: result.pdfPath
+      },
+      qrCodeData: result.certificateData.qrCodeData,
+      verificationUrl: result.certificateData.verificationUrl,
+      referenceNumber: result.certificateData.referenceNumber,
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('❌ Direct certificate generation failed:', error);
+    res.status(500).json({
+      error: 'Certificate generation failed',
+      message: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
 module.exports = router;
