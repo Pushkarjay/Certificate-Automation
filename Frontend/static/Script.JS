@@ -8,8 +8,8 @@
 const CONFIG = {
     API_BASE_URL: window.location.hostname === 'localhost' 
         ? 'http://localhost:3000/api' 
-        : 'https://your-domain.com/api',
-    VERIFICATION_ENDPOINT: '/verify'
+        : 'https://certificate-automation-dmoe.onrender.com/api',
+    VERIFICATION_ENDPOINT: '/certificates/verify'
 };
 
 // DOM Elements

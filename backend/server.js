@@ -124,32 +124,14 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Root endpoint (SRS API documentation)
+// Serve verification page at /verify/:refNo
+app.get('/verify/:refNo?', (req, res) => {
+  res.sendFile(path.join(__dirname, '../Frontend/static/index.html'));
+});
+
+// Serve verification page at root
 app.get('/', (req, res) => {
-  res.json({
-    message: 'Certificate Automation Backend API',
-    version: '1.0.0',
-    srs_compliance: {
-      database: dbService.dbType,
-      formats: ['IMG', 'PDF'],
-      performance_target: '<5 seconds',
-      security: 'Encrypted QR codes',
-      scalability: '10,000+ certificates'
-    },
-    endpoints: {
-      forms: '/api/forms',
-      certificates: '/api/certificates',
-      verify: '/api/verify',
-      admin: '/api/admin',
-      performance: '/api/performance',
-      health: '/health'
-    },
-    forms: {
-      student: process.env.STUDENT_FORM_URL || 'https://forms.gle/UygoiVrfaKi3A3z59',
-      trainer: process.env.TRAINER_FORM_URL,
-      trainee: process.env.TRAINEE_FORM_URL
-    }
-  });
+  res.sendFile(path.join(__dirname, '../Frontend/static/index.html'));
 });
 
 // Error handling middleware
