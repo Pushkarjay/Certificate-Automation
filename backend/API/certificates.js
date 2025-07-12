@@ -612,4 +612,109 @@ router.post('/verify/manual', async (req, res) => {
   }
 });
 
+// Revoke certificate
+router.post('/revoke/:id', async (req, res) => {
+  try {
+    const submissionId = req.params.id;
+    const { reason, revokedBy } = req.body;
+    
+    console.log(`🔄 Attempting to revoke certificate for submission ID: ${submissionId}`);
+    
+    // Check if the certificate exists and is in a revokable state
+    const checkQuery = `
+      SELECT submission_id, full_name, email_address, status, certificate_ref_no
+      FROM form_submissions 
+      WHERE submission_id = $1
+    `;
+    
+    const checkResult = await dbService.query(checkQuery, [submissionId]);
+    
+    if (checkResult.rows.length === 0) {
+      return res.status(404).json({ 
+        error: 'Certificate not found',
+        message: 'No certificate found with the provided ID.' 
+      });
+    }
+    
+    const submission = checkResult.rows[0];
+    
+    // Check if certificate can be revoked (must be generated or issued)
+    if (!['generated', 'issued'].includes(submission.status)) {
+      return res.status(400).json({
+        error: 'Cannot revoke certificate',
+        message: `Certificate with status '${submission.status}' cannot be revoked. Only generated or issued certificates can be revoked.`
+      });
+    }
+    
+    // Check if already revoked
+    if (submission.status === 'revoked') {
+      return res.status(400).json({
+        error: 'Certificate already revoked',
+        message: 'This certificate has already been revoked.'
+      });
+    }
+    
+    // Update the certificate status to revoked
+    const revokeQuery = `
+      UPDATE form_submissions 
+      SET 
+        status = 'revoked',
+        revoked_at = CURRENT_TIMESTAMP,
+        revocation_reason = $2,
+        revoked_by = $3,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE submission_id = $1
+      RETURNING *
+    `;
+    
+    const revokeParams = [
+      submissionId,
+      reason || 'Revoked by administrator',
+      revokedBy || 'admin'
+    ];
+    
+    const revokeResult = await dbService.query(revokeQuery, revokeParams);
+    
+    if (revokeResult.rows.length === 0) {
+      return res.status(500).json({
+        error: 'Failed to revoke certificate',
+        message: 'Certificate revocation failed due to database error.'
+      });
+    }
+    
+    const revokedCertificate = revokeResult.rows[0];
+    
+    console.log(`✅ Certificate revoked successfully:`, {
+      id: submissionId,
+      name: revokedCertificate.full_name,
+      refNo: revokedCertificate.certificate_ref_no,
+      reason: reason
+    });
+    
+    // Return success response
+    res.json({
+      success: true,
+      message: 'Certificate revoked successfully',
+      certificate: {
+        id: revokedCertificate.submission_id,
+        certificate_ref_no: revokedCertificate.certificate_ref_no,
+        full_name: revokedCertificate.full_name,
+        email: revokedCertificate.email_address,
+        status: revokedCertificate.status,
+        revoked_at: revokedCertificate.revoked_at,
+        revocation_reason: revokedCertificate.revocation_reason,
+        revoked_by: revokedCertificate.revoked_by
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Error revoking certificate:', error);
+    res.status(500).json({ 
+      error: 'Internal server error',
+      message: 'Failed to revoke certificate. Please try again later.',
+      details: error.message 
+    });
+  }
+});
+
 module.exports = router;

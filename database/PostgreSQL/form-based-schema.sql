@@ -102,6 +102,11 @@ CREATE TABLE form_submissions (
     certificate_type VARCHAR(50) DEFAULT 'student', -- student, trainer, trainee
     status VARCHAR(50) DEFAULT 'pending', -- pending, approved, generated, issued, revoked
     
+    -- Revocation Information
+    revoked_at TIMESTAMP NULL,
+    revocation_reason TEXT NULL,
+    revoked_by VARCHAR(255) NULL,
+    
     -- Additional flexible fields (JSON for custom form fields)
     additional_data JSONB,
     
@@ -179,6 +184,7 @@ CREATE INDEX idx_form_submissions_email ON form_submissions(email_address);
 CREATE INDEX idx_form_submissions_status ON form_submissions(status);
 CREATE INDEX idx_form_submissions_certificate_type ON form_submissions(certificate_type);
 CREATE INDEX idx_form_submissions_timestamp ON form_submissions(timestamp);
+CREATE INDEX idx_form_submissions_revoked_at ON form_submissions(revoked_at);
 CREATE INDEX idx_certificate_generations_ref_no ON certificate_generations(certificate_ref_no);
 CREATE INDEX idx_certificate_generations_status ON certificate_generations(status);
 CREATE INDEX idx_certificate_generations_submission_id ON certificate_generations(submission_id);
