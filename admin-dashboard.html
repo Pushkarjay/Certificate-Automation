@@ -173,6 +173,7 @@
             
             <button onclick="loadCertificates()">🔄 Refresh</button>
             <button onclick="generateAllPending()" class="generate">⚡ Generate All Pending</button>
+            <button onclick="testAPI()" style="background: #ffc107; color: #000;">🔧 Test API</button>
         </div>
         
         <div id="message"></div>
@@ -194,30 +195,55 @@
         // Load statistics
         async function loadStats() {
             try {
+                console.log('Loading stats from:', `${API_BASE}/admin/dashboard`);
                 const response = await fetch(`${API_BASE}/admin/dashboard`);
+                console.log('Stats response status:', response.status);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
                 const data = await response.json();
+                console.log('Stats data:', data);
                 
                 const statsContainer = document.getElementById('stats');
+                
+                // Handle different response structures
+                const totalSummary = data.totalSummary || {
+                    pending: 0,
+                    generated: 0,
+                    issued: 0,
+                    total: 0
+                };
+                
                 statsContainer.innerHTML = `
                     <div class="stat-card">
-                        <div class="stat-number">${data.totalSummary.pending}</div>
+                        <div class="stat-number">${totalSummary.pending}</div>
                         <div>Pending Approval</div>
                     </div>
                     <div class="stat-card">
-                        <div class="stat-number">${data.totalSummary.generated}</div>
+                        <div class="stat-number">${totalSummary.generated}</div>
                         <div>Generated</div>
                     </div>
                     <div class="stat-card">
-                        <div class="stat-number">${data.totalSummary.issued}</div>
+                        <div class="stat-number">${totalSummary.issued}</div>
                         <div>Issued</div>
                     </div>
                     <div class="stat-card">
-                        <div class="stat-number">${data.totalSummary.total}</div>
+                        <div class="stat-number">${totalSummary.total}</div>
                         <div>Total Certificates</div>
                     </div>
                 `;
             } catch (error) {
                 console.error('Error loading stats:', error);
+                const statsContainer = document.getElementById('stats');
+                statsContainer.innerHTML = `
+                    <div class="stat-card">
+                        <div class="stat-number">?</div>
+                        <div>Error Loading Stats</div>
+                    </div>
+                `;
+                showMessage('Failed to load dashboard statistics: ' + error.message, 'error');
             }
         }
         
@@ -230,9 +256,18 @@
             if (typeFilter) url += `&type=${typeFilter}`;
             if (statusFilter) url += `&status=${statusFilter}`;
             
+            console.log('Loading certificates from:', url);
+            
             try {
                 const response = await fetch(url);
+                console.log('Certificates response status:', response.status);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
                 const data = await response.json();
+                console.log('Certificates data:', data);
                 
                 const container = document.getElementById('certificatesContainer');
                 
@@ -253,15 +288,15 @@
                             <tbody>
                                 ${data.certificates.map(cert => `
                                     <tr>
-                                        <td>${cert.cert_type}</td>
-                                        <td>${cert.full_name}</td>
-                                        <td>${cert.email}</td>
-                                        <td>${cert.course_name || cert.course_domain || 'N/A'}</td>
-                                        <td><span class="status ${cert.status}">${cert.status}</span></td>
-                                        <td>${cert.certificate_ref_no || 'Not generated'}</td>
+                                        <td>${cert.cert_type || cert.certificate_type || 'N/A'}</td>
+                                        <td>${cert.full_name || cert.name || 'N/A'}</td>
+                                        <td>${cert.email || 'N/A'}</td>
+                                        <td>${cert.course_name || cert.course_domain || cert.domain || 'N/A'}</td>
+                                        <td><span class="status ${cert.status || 'unknown'}">${cert.status || 'unknown'}</span></td>
+                                        <td>${cert.certificate_ref_no || cert.reference_number || 'Not generated'}</td>
                                         <td>
                                             ${cert.status === 'pending' ? 
-                                                `<button class="generate" onclick="generateCertificate('${cert.cert_type}', '${cert.certificate_id}')">Generate</button>` :
+                                                `<button class="generate" onclick="generateCertificate('${cert.cert_type || cert.certificate_type}', '${cert.certificate_id || cert.id}')">Generate</button>` :
                                                 `<span style="color: #28a745;">✓ ${cert.status}</span>`
                                             }
                                         </td>
@@ -269,13 +304,36 @@
                                 `).join('')}
                             </tbody>
                         </table>
+                        <div style="margin-top: 15px; color: #666;">
+                            Found ${data.certificates.length} certificate(s)
+                            ${data.total ? ` out of ${data.total} total` : ''}
+                        </div>
                     `;
+                } else if (data.certificates && data.certificates.length === 0) {
+                    container.innerHTML = '<div class="loading">No certificates found with current filters</div>';
                 } else {
-                    container.innerHTML = '<div class="loading">No certificates found</div>';
+                    // Try different response structure
+                    container.innerHTML = `
+                        <div class="error">
+                            Unexpected response format. Raw data: <pre>${JSON.stringify(data, null, 2)}</pre>
+                        </div>
+                    `;
                 }
             } catch (error) {
+                console.error('Error loading certificates:', error);
                 showMessage('Error loading certificates: ' + error.message, 'error');
-                document.getElementById('certificatesContainer').innerHTML = '<div class="error">Failed to load certificates</div>';
+                document.getElementById('certificatesContainer').innerHTML = `
+                    <div class="error">
+                        <strong>Failed to load certificates</strong><br>
+                        Error: ${error.message}<br>
+                        <br>
+                        <strong>Troubleshooting:</strong><br>
+                        1. Check browser console (F12) for detailed errors<br>
+                        2. Verify API is running at: <a href="${API_BASE}" target="_blank">${API_BASE}</a><br>
+                        3. Try refreshing the page<br>
+                        4. Check if CORS is properly configured
+                    </div>
+                `;
             }
         }
         
@@ -358,6 +416,48 @@
                     messageDiv.innerHTML = '';
                 }, 5000);
             }
+        }
+        
+        // Test API connectivity
+        async function testAPI() {
+            showMessage('Testing API connectivity...', 'loading');
+            
+            const tests = [
+                { name: 'Health Check', url: `${API_BASE.replace('/api', '')}/` },
+                { name: 'Admin Dashboard', url: `${API_BASE}/admin/dashboard` },
+                { name: 'Certificates List', url: `${API_BASE}/certificates` }
+            ];
+            
+            const results = [];
+            
+            for (const test of tests) {
+                try {
+                    console.log(`Testing ${test.name}:`, test.url);
+                    const response = await fetch(test.url);
+                    results.push({
+                        name: test.name,
+                        status: response.status,
+                        ok: response.ok,
+                        statusText: response.statusText
+                    });
+                } catch (error) {
+                    results.push({
+                        name: test.name,
+                        status: 'Error',
+                        ok: false,
+                        statusText: error.message
+                    });
+                }
+            }
+            
+            const resultHTML = results.map(r => 
+                `<div style="margin: 5px 0; color: ${r.ok ? 'green' : 'red'};">
+                    ${r.name}: ${r.status} ${r.statusText}
+                </div>`
+            ).join('');
+            
+            showMessage(`API Test Results:<br>${resultHTML}`, 'success');
+            console.log('API Test Results:', results);
         }
     </script>
 </body>
