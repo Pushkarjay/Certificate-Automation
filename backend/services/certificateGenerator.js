@@ -1,23 +1,39 @@
-const { createCanvas, loadImage, registerFont } = require('canvas');
+// Try to load canvas, but continue without it if it fails
+let createCanvas, loadImage, registerFont;
+try {
+  const canvas = require('canvas');
+  createCanvas = canvas.createCanvas;
+  loadImage = canvas.loadImage;
+  registerFont = canvas.registerFont;
+  
+  // Register fonts
+  try {
+    registerFont(path.join(__dirname, '../Certificate_Templates/fonts/times.ttf'), { family: 'Times' });
+    registerFont(path.join(__dirname, '../Certificate_Templates/fonts/EBGaramond-Regular.ttf'), { family: 'EBGaramond' });
+  } catch (error) {
+    console.warn('⚠️ Font files not found. Using default fonts.');
+  }
+} catch (error) {
+  console.warn('⚠️ Canvas module not available. Using fallback generation methods.');
+}
+
 const PDFDocument = require('pdfkit');
 const path = require('path');
 const fs = require('fs').promises;
 const crypto = require('crypto');
 const QRCode = require('qrcode');
 
-// Register fonts
-try {
-  registerFont(path.join(__dirname, '../Certificate_Templates/fonts/times.ttf'), { family: 'Times' });
-  registerFont(path.join(__dirname, '../Certificate_Templates/fonts/EBGaramond-Regular.ttf'), { family: 'EBGaramond' });
-} catch (error) {
-  console.warn('⚠️ Font files not found. Using default fonts.');
-}
-
 /**
  * Generate certificate in both IMG and PDF formats based on SRS requirements
  */
 async function generateCertificate(certificateData, certificateType) {
   try {
+    // If canvas is not available, use the simplified generation
+    if (!createCanvas || !loadImage) {
+      console.log('📄 Using simplified certificate generation (canvas not available)');
+      return await generateSimpleCertificate(certificateData);
+    }
+    
     const templatePath = path.join(__dirname, '../Certificate_Templates', certificateData.template_file_path);
     
     // Load template image

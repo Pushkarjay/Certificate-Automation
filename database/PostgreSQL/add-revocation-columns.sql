@@ -21,5 +21,12 @@ COMMENT ON COLUMN form_submissions.revoked_at IS 'Timestamp when the certificate
 COMMENT ON COLUMN form_submissions.revocation_reason IS 'Reason for certificate revocation';
 COMMENT ON COLUMN form_submissions.revoked_by IS 'User/admin who revoked the certificate';
 
+-- Add status column for certificate state
+ALTER TABLE form_submissions 
+ADD COLUMN IF NOT EXISTS status VARCHAR(20) NULL;
+
+-- Set default status for existing rows
+UPDATE form_submissions SET status = 'generated' WHERE status IS NULL;
+
 -- Display schema update completion
 SELECT 'Revocation columns added successfully to form_submissions table' AS status;
