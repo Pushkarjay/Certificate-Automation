@@ -1,12 +1,12 @@
 const express = require('express');
 const router = express.Router();
-const { pool } = require('../server');
+const dbService = require('../services/databaseService');
 
 // Admin dashboard overview
 router.get('/dashboard', async (req, res) => {
   try {
     // Get certificate counts by type and status from form_submissions
-    const [submissionStats] = await pool.execute(`
+    const submissionStats = await dbService.query(`
       SELECT 
         certificate_type as type,
         COUNT(*) as total,
@@ -20,7 +20,7 @@ router.get('/dashboard', async (req, res) => {
     `);
 
     // Get recent form submissions
-    const [recentSubmissions] = await pool.execute(`
+    const recentSubmissions = await dbService.query(`
       SELECT 
         submission_id,
         certificate_type as type,
@@ -35,7 +35,7 @@ router.get('/dashboard', async (req, res) => {
     `);
 
     // Get course statistics
-    const [courseStats] = await pool.execute(`
+    const courseStats = await dbService.query(`
       SELECT 
         course_name,
         certificate_type,
@@ -50,7 +50,7 @@ router.get('/dashboard', async (req, res) => {
     `);
 
     // Get certificate generation statistics
-    const [generationStats] = await pool.execute(`
+    const generationStats = await dbService.query(`
       SELECT 
         DATE(cg.generated_at) as date,
         COUNT(*) as certificates_generated
@@ -62,7 +62,7 @@ router.get('/dashboard', async (req, res) => {
     `);
 
     // Calculate totals
-    const totals = submissionStats.reduce((acc, row) => {
+    const totals = submissionStats.rows.reduce((acc, row) => {
       acc.total += row.total;
       acc.pending += row.pending;
       acc.generated += row.generated;
@@ -74,10 +74,10 @@ router.get('/dashboard', async (req, res) => {
 
     res.json({
       overview: totals,
-      submissionsByType: submissionStats,
-      recentSubmissions,
-      courseStatistics: courseStats,
-      generationStats,
+      submissionsByType: submissionStats.rows,
+      recentSubmissions: recentSubmissions.rows,
+      courseStatistics: courseStats.rows,
+      generationStats: generationStats.rows,
       timestamp: new Date().toISOString()
     });
 
@@ -151,8 +151,8 @@ router.get('/submissions', async (req, res) => {
     const countParams = params.slice(0, -2); // Remove limit and offset
 
     const [submissions, countResult] = await Promise.all([
-      pool.query(query, params),
-      pool.query(countQuery, countParams)
+      dbService.query(query, params),
+      dbService.query(countQuery, countParams)
     ]);
 
     res.json({
@@ -188,7 +188,7 @@ router.patch('/submissions/:id/status', async (req, res) => {
       RETURNING *
     `;
     
-    const result = await pool.query(query, [status, id]);
+    const result = await dbService.query(query, [status, id]);
     
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Form submission not found' });
@@ -212,7 +212,7 @@ router.patch('/submissions/:id/status', async (req, res) => {
 // Get all courses
 router.get('/courses', async (req, res) => {
   try {
-    const [courses] = await pool.execute(`
+    const courses = await dbService.query(`
       SELECT 
         c.*,
         COUNT(DISTINCT b.batch_id) as total_batches,
@@ -227,7 +227,7 @@ router.get('/courses', async (req, res) => {
       ORDER BY c.course_name
     `);
 
-    res.json(courses);
+    res.json(courses.rows);
 
   } catch (error) {
     console.error('❌ Error fetching courses:', error);
@@ -238,7 +238,7 @@ router.get('/courses', async (req, res) => {
 // Get all batches
 router.get('/batches', async (req, res) => {
   try {
-    const [batches] = await pool.execute(`
+    const batches = await dbService.query(`
       SELECT 
         b.*,
         c.course_name,
@@ -252,7 +252,7 @@ router.get('/batches', async (req, res) => {
       ORDER BY b.start_date DESC
     `);
 
-    res.json(batches);
+    res.json(batches.rows);
 
   } catch (error) {
     console.error('❌ Error fetching batches:', error);
@@ -263,7 +263,7 @@ router.get('/batches', async (req, res) => {
 // Get all templates
 router.get('/templates', async (req, res) => {
   try {
-    const [templates] = await pool.execute(`
+    const templates = await dbService.query(`
       SELECT 
         t.*,
         (
@@ -275,7 +275,7 @@ router.get('/templates', async (req, res) => {
       ORDER BY t.template_type, t.template_name
     `);
 
-    res.json(templates);
+    res.json(templates.rows);
 
   } catch (error) {
     console.error('❌ Error fetching templates:', error);
@@ -298,7 +298,7 @@ router.post('/courses', async (req, res) => {
       RETURNING *
     `;
     
-    const result = await pool.query(query, [course_name, course_code, description, duration_hours]);
+    const result = await dbService.query(query, [course_name, course_code, description, duration_hours]);
     
     res.json({
       success: true,
@@ -331,7 +331,7 @@ router.post('/batches', async (req, res) => {
       RETURNING *
     `;
     
-    const result = await pool.query(query, [batch_name, batch_initials, course_id, start_date, end_date]);
+    const result = await dbService.query(query, [batch_name, batch_initials, course_id, start_date, end_date]);
     
     res.json({
       success: true,
@@ -360,7 +360,7 @@ router.post('/templates', async (req, res) => {
       RETURNING *
     `;
     
-    const result = await pool.query(query, [template_name, template_path, template_type]);
+    const result = await dbService.query(query, [template_name, template_path, template_type]);
     
     res.json({
       success: true,
@@ -411,7 +411,7 @@ router.get('/export/:type', async (req, res) => {
         return res.status(400).json({ error: 'Invalid export type' });
     }
     
-    const result = await pool.query(query);
+    const result = await dbService.query(query);
     
     if (format === 'csv') {
       // Convert to CSV

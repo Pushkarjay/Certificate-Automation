@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { pool } = require('../server');
+const dbService = require('../services/databaseService');
 const { generateCertificate } = require('../services/certificateGenerator');
 const QRCode = require('qrcode');
 
@@ -64,8 +64,8 @@ router.get('/', async (req, res) => {
     const countParams = params.slice(0, -2); // Remove limit and offset
 
     const [certificates, countResult] = await Promise.all([
-      pool.query(query, params),
-      pool.query(countQuery, countParams)
+      dbService.query(query, params),
+      dbService.query(countQuery, countParams)
     ]);
 
     res.json({
@@ -105,7 +105,7 @@ router.get('/:id', async (req, res) => {
       WHERE fs.submission_id = $1
     `;
     
-    const result = await pool.query(query, [id]);
+    const result = await dbService.query(query, [id]);
     
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Certificate/submission not found' });
@@ -130,7 +130,7 @@ router.post('/generate/:id', async (req, res) => {
       WHERE submission_id = $1 AND status = 'pending'
     `;
     
-    const submissionResult = await pool.query(submissionQuery, [submissionId]);
+    const submissionResult = await dbService.query(submissionQuery, [submissionId]);
     
     if (submissionResult.rows.length === 0) {
       return res.status(404).json({ 
@@ -146,7 +146,7 @@ router.post('/generate/:id', async (req, res) => {
       WHERE submission_id = $1
     `;
     
-    const existingResult = await pool.query(existingCertQuery, [submissionId]);
+    const existingResult = await dbService.query(existingCertQuery, [submissionId]);
     
     if (existingResult.rows.length > 0) {
       return res.status(400).json({ 
@@ -170,7 +170,7 @@ router.post('/generate/:id', async (req, res) => {
       LIMIT 1
     `;
     
-    const templateResult = await pool.query(templateQuery, [submission.certificate_type]);
+    const templateResult = await dbService.query(templateQuery, [submission.certificate_type]);
     let templateId = null;
     let templatePath = 'G1 CC.jpg'; // Default template
     
@@ -206,13 +206,13 @@ router.post('/generate/:id', async (req, res) => {
       RETURNING certificate_id
     `;
 
-    const certResult = await pool.query(insertCertQuery, [
+    const certResult = await dbService.query(insertCertQuery, [
       submissionId, refNo, verificationUrl, qrCodeData,
       generatedFiles.imagePath, generatedFiles.pdfPath, templateId
     ]);
 
     // Update form submission status
-    await pool.query(
+    await dbService.query(
       'UPDATE form_submissions SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE submission_id = $2',
       ['generated', submissionId]
     );
@@ -252,7 +252,7 @@ async function generateCertificateRefNo(submission) {
     AND EXTRACT(YEAR FROM cg.created_at) = $2
   `;
   
-  const countResult = await pool.query(countQuery, [submission.certificate_type, year]);
+  const countResult = await dbService.query(countQuery, [submission.certificate_type, year]);
   const counter = parseInt(countResult.rows[0].count) + 1;
   
   return `${type}_${course}_${batch}_${year}_${counter.toString().padStart(4, '0')}`;
@@ -283,7 +283,7 @@ router.post('/generate-batch', async (req, res) => {
           WHERE fs.submission_id = $1
         `;
         
-        const checkResult = await pool.query(checkQuery, [submissionId]);
+        const checkResult = await dbService.query(checkQuery, [submissionId]);
         
         if (checkResult.rows.length === 0) {
           results.failed.push({ submissionId, error: 'Submission not found' });
@@ -338,13 +338,13 @@ router.post('/generate-batch', async (req, res) => {
           RETURNING certificate_id
         `;
 
-        const certResult = await pool.query(insertCertQuery, [
+        const certResult = await dbService.query(insertCertQuery, [
           submissionId, refNo, verificationUrl, qrCodeData,
           generatedFiles.imagePath, generatedFiles.pdfPath
         ]);
 
         // Update form submission status
-        await pool.query(
+        await dbService.query(
           'UPDATE form_submissions SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE submission_id = $2',
           ['generated', submissionId]
         );
@@ -411,7 +411,7 @@ router.get('/verify/:refNo', async (req, res) => {
       WHERE cg.certificate_ref_no = $1
     `;
     
-    const result = await pool.query(query, [refNo]);
+    const result = await dbService.query(query, [refNo]);
     
     if (result.rows.length === 0) {
       return res.status(404).json({
@@ -424,7 +424,7 @@ router.get('/verify/:refNo', async (req, res) => {
     const cert = result.rows[0];
 
     // Update verification count
-    await pool.query(
+    await dbService.query(
       'UPDATE certificate_generations SET verification_count = verification_count + 1, last_verified = CURRENT_TIMESTAMP WHERE certificate_ref_no = $1',
       [refNo]
     );
