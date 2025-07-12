@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Certificate Admin Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #333;
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .stat-card {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        
+        .stat-number {
+            font-size: 2em;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        
+        .filter-section {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        
+        select, button {
+            padding: 10px 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        
+        button:hover {
+            background: #5a6fd8;
+        }
+        
+        button.generate {
+            background: #28a745;
+        }
+        
+        button.generate:hover {
+            background: #218838;
+        }
+        
+        .certificates-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        
+        .certificates-table th,
+        .certificates-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        .certificates-table th {
+            background: #f8f9fa;
+            font-weight: 600;
+        }
+        
+        .status {
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        
+        .status.pending {
+            background: #fff3cd;
+            color: #856404;
+        }
+        
+        .status.generated {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+        
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        
+        .success {
+            background: #d4edda;
+            color: #155724;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎓 Certificate Admin Dashboard</h1>
+        
+        <div class="stats" id="stats">
+            <!-- Stats will be loaded here -->
+        </div>
+        
+        <div class="filter-section">
+            <select id="typeFilter">
+                <option value="">All Types</option>
+                <option value="student">Student</option>
+                <option value="trainer">Trainer</option>
+                <option value="trainee">Trainee</option>
+            </select>
+            
+            <select id="statusFilter">
+                <option value="">All Status</option>
+                <option value="pending">Pending</option>
+                <option value="generated">Generated</option>
+                <option value="issued">Issued</option>
+                <option value="revoked">Revoked</option>
+            </select>
+            
+            <button onclick="loadCertificates()">🔄 Refresh</button>
+            <button onclick="generateAllPending()" class="generate">⚡ Generate All Pending</button>
+        </div>
+        
+        <div id="message"></div>
+        
+        <div id="certificatesContainer">
+            <div class="loading">Loading certificates...</div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'https://certificate-automation-dmoe.onrender.com/api';
+        
+        // Load dashboard on page load
+        window.onload = function() {
+            loadStats();
+            loadCertificates();
+        };
+        
+        // Load statistics
+        async function loadStats() {
+            try {
+                const response = await fetch(`${API_BASE}/admin/dashboard`);
+                const data = await response.json();
+                
+                const statsContainer = document.getElementById('stats');
+                statsContainer.innerHTML = `
+                    <div class="stat-card">
+                        <div class="stat-number">${data.totalSummary.pending}</div>
+                        <div>Pending Approval</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number">${data.totalSummary.generated}</div>
+                        <div>Generated</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number">${data.totalSummary.issued}</div>
+                        <div>Issued</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number">${data.totalSummary.total}</div>
+                        <div>Total Certificates</div>
+                    </div>
+                `;
+            } catch (error) {
+                console.error('Error loading stats:', error);
+            }
+        }
+        
+        // Load certificates
+        async function loadCertificates() {
+            const typeFilter = document.getElementById('typeFilter').value;
+            const statusFilter = document.getElementById('statusFilter').value;
+            
+            let url = `${API_BASE}/certificates?limit=100`;
+            if (typeFilter) url += `&type=${typeFilter}`;
+            if (statusFilter) url += `&status=${statusFilter}`;
+            
+            try {
+                const response = await fetch(url);
+                const data = await response.json();
+                
+                const container = document.getElementById('certificatesContainer');
+                
+                if (data.certificates && data.certificates.length > 0) {
+                    container.innerHTML = `
+                        <table class="certificates-table">
+                            <thead>
+                                <tr>
+                                    <th>Type</th>
+                                    <th>Name</th>
+                                    <th>Email</th>
+                                    <th>Course/Domain</th>
+                                    <th>Status</th>
+                                    <th>Reference</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${data.certificates.map(cert => `
+                                    <tr>
+                                        <td>${cert.cert_type}</td>
+                                        <td>${cert.full_name}</td>
+                                        <td>${cert.email}</td>
+                                        <td>${cert.course_name || cert.course_domain || 'N/A'}</td>
+                                        <td><span class="status ${cert.status}">${cert.status}</span></td>
+                                        <td>${cert.certificate_ref_no || 'Not generated'}</td>
+                                        <td>
+                                            ${cert.status === 'pending' ? 
+                                                `<button class="generate" onclick="generateCertificate('${cert.cert_type}', '${cert.certificate_id}')">Generate</button>` :
+                                                `<span style="color: #28a745;">✓ ${cert.status}</span>`
+                                            }
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    `;
+                } else {
+                    container.innerHTML = '<div class="loading">No certificates found</div>';
+                }
+            } catch (error) {
+                showMessage('Error loading certificates: ' + error.message, 'error');
+                document.getElementById('certificatesContainer').innerHTML = '<div class="error">Failed to load certificates</div>';
+            }
+        }
+        
+        // Generate single certificate
+        async function generateCertificate(type, id) {
+            try {
+                showMessage('Generating certificate...', 'loading');
+                
+                const response = await fetch(`${API_BASE}/certificates/generate/${type}/${id}`, {
+                    method: 'POST'
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showMessage(`Certificate generated successfully! Reference: ${data.referenceNumber}`, 'success');
+                    loadCertificates();
+                    loadStats();
+                } else {
+                    showMessage('Error: ' + data.error, 'error');
+                }
+            } catch (error) {
+                showMessage('Error generating certificate: ' + error.message, 'error');
+            }
+        }
+        
+        // Generate all pending certificates
+        async function generateAllPending() {
+            if (!confirm('Are you sure you want to generate ALL pending certificates? This action cannot be undone.')) {
+                return;
+            }
+            
+            try {
+                showMessage('Loading pending certificates...', 'loading');
+                
+                // Get all pending certificates
+                const response = await fetch(`${API_BASE}/certificates?status=pending&limit=1000`);
+                const data = await response.json();
+                
+                if (data.certificates && data.certificates.length > 0) {
+                    showMessage(`Generating ${data.certificates.length} certificates...`, 'loading');
+                    
+                    let generated = 0;
+                    let failed = 0;
+                    
+                    for (const cert of data.certificates) {
+                        try {
+                            const genResponse = await fetch(`${API_BASE}/certificates/generate/${cert.cert_type}/${cert.certificate_id}`, {
+                                method: 'POST'
+                            });
+                            
+                            if (genResponse.ok) {
+                                generated++;
+                            } else {
+                                failed++;
+                            }
+                        } catch (error) {
+                            failed++;
+                        }
+                    }
+                    
+                    showMessage(`Batch generation complete! Generated: ${generated}, Failed: ${failed}`, 'success');
+                    loadCertificates();
+                    loadStats();
+                } else {
+                    showMessage('No pending certificates found', 'error');
+                }
+            } catch (error) {
+                showMessage('Error in batch generation: ' + error.message, 'error');
+            }
+        }
+        
+        // Show message
+        function showMessage(message, type) {
+            const messageDiv = document.getElementById('message');
+            messageDiv.innerHTML = `<div class="${type}">${message}</div>`;
+            
+            if (type !== 'loading') {
+                setTimeout(() => {
+                    messageDiv.innerHTML = '';
+                }, 5000);
+            }
+        }
+    </script>
+</body>
+</html>
