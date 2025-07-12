@@ -184,7 +184,12 @@
     </div>
 
     <script>
-        const API_BASE = 'https://certificate-automation-dmoe.onrender.com/api';
+        // Dynamic API base URL - use relative path when served from backend
+        const API_BASE = window.location.hostname === 'localhost' 
+            ? 'http://localhost:3000/api' 
+            : `${window.location.origin}/api`;
+        
+        console.log('Using API base:', API_BASE);
         
         // Load dashboard on page load
         window.onload = function() {
@@ -204,7 +209,7 @@
                 }
                 
                 const data = await response.json();
-                console.log('Stats data:', data);
+                console.log('Stats data received:', data);
                 
                 const statsContainer = document.getElementById('stats');
                 
@@ -216,21 +221,23 @@
                     total: 0
                 };
                 
+                console.log('Displaying stats:', totalSummary);
+                
                 statsContainer.innerHTML = `
                     <div class="stat-card">
-                        <div class="stat-number">${totalSummary.pending}</div>
+                        <div class="stat-number">${totalSummary.pending || 0}</div>
                         <div>Pending Approval</div>
                     </div>
                     <div class="stat-card">
-                        <div class="stat-number">${totalSummary.generated}</div>
+                        <div class="stat-number">${totalSummary.generated || 0}</div>
                         <div>Generated</div>
                     </div>
                     <div class="stat-card">
-                        <div class="stat-number">${totalSummary.issued}</div>
+                        <div class="stat-number">${totalSummary.issued || 0}</div>
                         <div>Issued</div>
                     </div>
                     <div class="stat-card">
-                        <div class="stat-number">${totalSummary.total}</div>
+                        <div class="stat-number">${totalSummary.total || 0}</div>
                         <div>Total Certificates</div>
                     </div>
                 `;
@@ -238,9 +245,10 @@
                 console.error('Error loading stats:', error);
                 const statsContainer = document.getElementById('stats');
                 statsContainer.innerHTML = `
-                    <div class="stat-card">
-                        <div class="stat-number">?</div>
+                    <div class="stat-card" style="background: #dc3545;">
+                        <div class="stat-number">!</div>
                         <div>Error Loading Stats</div>
+                        <small>${error.message}</small>
                     </div>
                 `;
                 showMessage('Failed to load dashboard statistics: ' + error.message, 'error');

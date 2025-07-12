@@ -9,12 +9,12 @@ router.get('/dashboard', async (req, res) => {
     const submissionStats = await dbService.query(`
       SELECT 
         certificate_type as type,
-        COUNT(*) as total,
-        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
-        SUM(CASE WHEN status = 'generated' THEN 1 ELSE 0 END) as generated,
-        SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) as approved,
-        SUM(CASE WHEN status = 'issued' THEN 1 ELSE 0 END) as issued,
-        SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected
+        COUNT(*)::int as total,
+        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END)::int as pending,
+        SUM(CASE WHEN status = 'generated' THEN 1 ELSE 0 END)::int as generated,
+        SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END)::int as approved,
+        SUM(CASE WHEN status = 'issued' THEN 1 ELSE 0 END)::int as issued,
+        SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END)::int as rejected
       FROM form_submissions
       GROUP BY certificate_type
     `);
@@ -39,9 +39,9 @@ router.get('/dashboard', async (req, res) => {
       SELECT 
         course_name,
         certificate_type,
-        COUNT(*) as total_submissions,
-        SUM(CASE WHEN status = 'generated' THEN 1 ELSE 0 END) as generated_certificates,
-        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending_approvals
+        COUNT(*)::int as total_submissions,
+        SUM(CASE WHEN status = 'generated' THEN 1 ELSE 0 END)::int as generated_certificates,
+        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END)::int as pending_approvals
       FROM form_submissions
       WHERE course_name IS NOT NULL
       GROUP BY course_name, certificate_type
@@ -53,7 +53,7 @@ router.get('/dashboard', async (req, res) => {
     const generationStats = await dbService.query(`
       SELECT 
         DATE(cg.generated_at) as date,
-        COUNT(*) as certificates_generated
+        COUNT(*)::int as certificates_generated
       FROM certificate_generations cg
       WHERE cg.generated_at >= CURRENT_DATE - INTERVAL '30 days'
       GROUP BY DATE(cg.generated_at)
@@ -63,12 +63,12 @@ router.get('/dashboard', async (req, res) => {
 
     // Calculate totals
     const totals = submissionStats.rows.reduce((acc, row) => {
-      acc.total += row.total;
-      acc.pending += row.pending;
-      acc.generated += row.generated;
-      acc.approved += row.approved;
-      acc.issued += row.issued;
-      acc.rejected += row.rejected;
+      acc.total += parseInt(row.total) || 0;
+      acc.pending += parseInt(row.pending) || 0;
+      acc.generated += parseInt(row.generated) || 0;
+      acc.approved += parseInt(row.approved) || 0;
+      acc.issued += parseInt(row.issued) || 0;
+      acc.rejected += parseInt(row.rejected) || 0;
       return acc;
     }, { total: 0, pending: 0, generated: 0, approved: 0, issued: 0, rejected: 0 });
 
