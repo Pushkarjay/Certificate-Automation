@@ -628,42 +628,44 @@ async function generateSimplePNGCertificate(certificateData, imgPath, refNo, ver
 }
 
 /**
- * Generate certificate using Canvas (similar to Python PIL approach)
+ * Generate certificate using Canvas with actual template backgrounds
  */
 async function generateCanvasCertificate(certificateData, refNo, verificationUrl) {
+  if (!createCanvas || !loadImage) {
+    throw new Error('Canvas not available');
+  }
+
   // Map certificate type to template file (based on actual available templates)
   const templateMap = {
-    'student': {
-      'PYTHON': 'G28 Python.jpg',
-      'JAVA': 'G12 Java.jpg', 
-      'VLSI': 'G10 VLSI.jpg',
-      'SQL': 'G12 SQL.jpg',
-      'CC': 'CC.jpg',
-      'DSA': 'DSA.jpg',
-      'ROBOTICS': 'ROBOTICS.jpg',
-      'AAD': 'AAD.jpg',
-      'ST&T': 'ST&T.jpg',
-      'AUTOCAD': 'Autocad.jpg',
-      'SAP FICO': 'SAP FICO.jpg',
-      'CS': 'G6 CS.jpg',
-      'ES': 'G7 ES.jpg',
-      'DS': 'G8 DS.jpg',
-      // Additional mappings for available templates
-      'G13 JAVA': 'G13 JAVA.jpg',
-      'G13 VLSI': 'G13 VLSI.jpg',
-      'G14 VLSI': 'G14 VLSI.jpg',
-      'G15 VLSI': 'G15 VLSI.jpg',
-      'G16 VLSI': 'G16 VLSI.jpg',
-      'G6 AUTOCAD': 'G6 AUTOCAD.jpg',
-      'G7 AUTOCAD': 'G7 Autocad.jpg'
-    }
+    'PYTHON': 'G28 Python.jpg',
+    'JAVA': 'G12 Java.jpg', 
+    'VLSI': 'G10 VLSI.jpg',
+    'SQL': 'G12 SQL.jpg',
+    'CC': 'CC.jpg',
+    'DSA': 'DSA.jpg',
+    'ROBOTICS': 'ROBOTICS.jpg',
+    'AAD': 'AAD.jpg',
+    'ST&T': 'ST&T.jpg',
+    'AUTOCAD': 'Autocad.jpg',
+    'SAP FICO': 'SAP FICO.jpg',
+    'CS': 'G6 CS.jpg',
+    'ES': 'G7 ES.jpg',
+    'DS': 'G8 DS.jpg',
+    'G13 JAVA': 'G13 JAVA.jpg',
+    'G13 VLSI': 'G13 VLSI.jpg',
+    'G14 VLSI': 'G14 VLSI.jpg',
+    'G15 VLSI': 'G15 VLSI.jpg',
+    'G16 VLSI': 'G16 VLSI.jpg',
+    'G6 AUTOCAD': 'G6 AUTOCAD.jpg',
+    'G7 AUTOCAD': 'G7 Autocad.jpg'
   };
 
   // Find template based on course name
-  let templateFile = 'CC.jpg'; // Default template (exists in templates)
+  let templateFile = certificateData.templatePath || 'CC.jpg'; // Use provided template or default
   const courseUpper = certificateData.course.toUpperCase();
   
-  for (const [key, template] of Object.entries(templateMap.student)) {
+  // Try to find best matching template
+  for (const [key, template] of Object.entries(templateMap)) {
     if (courseUpper.includes(key)) {
       templateFile = template;
       break;
@@ -671,99 +673,140 @@ async function generateCanvasCertificate(certificateData, refNo, verificationUrl
   }
 
   const templatePath = path.join(__dirname, '../Certificate_Templates', templateFile);
+  console.log('🎨 Using certificate template:', templateFile);
   
-  // Load template image
-  const templateImage = await loadImage(templatePath);
-  
-  // Create canvas with template dimensions
-  const canvas = createCanvas(templateImage.width, templateImage.height);
-  const ctx = canvas.getContext('2d');
-  
-  // Draw template background
-  ctx.drawImage(templateImage, 0, 0);
-  
-  // Insert name (similar to Python insert_name function)
-  await insertNameOnCanvas(ctx, certificateData.name, canvas.width);
-  
-  // Insert content text (similar to Python insert_text function)
-  await insertContentOnCanvas(ctx, certificateData, canvas.width);
-  
-  // Add QR code
-  await addQRCodeToCanvas(ctx, { reference_number: refNo }, canvas.width, canvas.height);
-  
-  return canvas;
+  try {
+    // Load template image as background
+    const templateImage = await loadImage(templatePath);
+    
+    // Create canvas with template dimensions
+    const canvas = createCanvas(templateImage.width, templateImage.height);
+    const ctx = canvas.getContext('2d');
+    
+    // Draw template background first
+    ctx.drawImage(templateImage, 0, 0);
+    
+    // Now overlay the text and QR code on top of the template
+    
+    // Set up text styling for overlaying on template
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    
+    // Insert student name (overlay on template)
+    await insertNameOnTemplate(ctx, certificateData.name, canvas.width, canvas.height);
+    
+    // Insert course details (overlay on template)
+    await insertCourseDetailsOnTemplate(ctx, certificateData, canvas.width, canvas.height);
+    
+    // Add QR code in corner
+    await addQRCodeToTemplate(ctx, refNo, verificationUrl, canvas.width, canvas.height);
+    
+    console.log('✅ Certificate generated with template background');
+    return canvas;
+    
+  } catch (templateError) {
+    console.warn('⚠️ Template loading failed, using fallback:', templateError.message);
+    // Fallback to basic template if specific template fails
+    return await generateBasicCanvasCertificate(certificateData, refNo, verificationUrl);
+  }
 }
 
 /**
- * Insert name on canvas (Python equivalent: insert_name function)
+ * Insert name on template (overlaying on existing background)
  */
-async function insertNameOnCanvas(ctx, fullName, canvasWidth) {
-  const name = fullName; // Assuming title is already included
+async function insertNameOnTemplate(ctx, fullName, canvasWidth, canvasHeight) {
+  const name = fullName;
   
-  // Find the best available font size (similar to Python while loop)
-  let fontSize = 90;
+  // Set text styling for overlay on template
+  ctx.fillStyle = '#000000';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  
+  // Find appropriate font size for template overlay
+  let fontSize = 60;
   let textWidth;
   
   do {
-    fontSize -= 10;
-    ctx.font = `${fontSize}px Times, serif`;
+    fontSize -= 5;
+    ctx.font = `bold ${fontSize}px Times, serif`;
     const metrics = ctx.measureText(name);
     textWidth = metrics.width;
-  } while (textWidth > canvasWidth - 240 && fontSize > 30); // Keep margin like Python (pos[0]>120)
+  } while (textWidth > canvasWidth * 0.7 && fontSize > 20);
   
-  // Calculate position (similar to Python pos calculation)
-  const x = (canvasWidth - textWidth) / 2;
-  const y = 362 + (90 - fontSize) / 2; // Adjust Y based on font size reduction
+  // Position text in typical certificate name area (adjust based on template)
+  const x = canvasWidth / 2;
+  const y = canvasHeight * 0.45; // Usually around 45% down the certificate
   
-  // Ensure minimum x position (Python: if pos[0]>120)
-  const finalX = Math.max(x, 120);
+  // Add text shadow for better visibility on template background
+  ctx.shadowColor = 'rgba(255,255,255,0.8)';
+  ctx.shadowBlur = 2;
+  ctx.shadowOffsetX = 1;
+  ctx.shadowOffsetY = 1;
   
-  // Draw text (similar to Python draw.text)
-  ctx.fillStyle = '#000000';
-  ctx.fillText(name, finalX, y);
+  // Draw the name
+  ctx.fillText(name, x, y);
+  
+  // Reset shadow
+  ctx.shadowColor = 'transparent';
+  ctx.shadowBlur = 0;
+  ctx.shadowOffsetX = 0;
+  ctx.shadowOffsetY = 0;
 }
 
 /**
- * Insert content text on canvas (Python equivalent: insert_text function)
+ * Insert course details on template (overlaying on existing background)
  */
-async function insertContentOnCanvas(ctx, certificateData, canvasWidth) {
-  // Generate content text (similar to Python text variable)
+async function insertCourseDetailsOnTemplate(ctx, certificateData, canvasWidth, canvasHeight) {
+  // Generate content text
   const text = `For successful completion of four months training in "${certificateData.course}" from ${formatDate(certificateData.startDate)} to ${formatDate(certificateData.endDate)} securing ${certificateData.gpa || '8.5'} GPA, attending the mandatory "Life Skills Training" sessions, and completing the services to community launched by SURE Trust`;
   
-  // Set font (similar to Python font setup)
-  ctx.font = '30px EBGaramond, serif';
+  // Set font for content overlay
+  ctx.font = '18px Times, serif';
   ctx.fillStyle = '#000000';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
   
-  // Word wrap and draw text (similar to Python line wrapping logic)
-  const x = 181; // Python: x = 181
-  let y = 497;   // Python: y = 497
-  const lines = [];
-  let currentLine = "";
-  const words = text.split(" ");
+  // Add text shadow for better visibility on template
+  ctx.shadowColor = 'rgba(255,255,255,0.7)';
+  ctx.shadowBlur = 1;
+  ctx.shadowOffsetX = 0.5;
+  ctx.shadowOffsetY = 0.5;
   
-  // Word wrapping logic (similar to Python for loop)
+  // Position for content area (typically below name)
+  const startX = canvasWidth * 0.1; // 10% from left
+  const startY = canvasHeight * 0.55; // 55% down from top
+  const maxWidth = canvasWidth * 0.8; // 80% of canvas width
+  const lineHeight = 25;
+  
+  // Word wrap and draw text
+  const words = text.split(' ');
+  let currentLine = '';
+  let y = startY;
+  
   for (const word of words) {
-    const testLine = currentLine + word + " ";
+    const testLine = currentLine + word + ' ';
     const metrics = ctx.measureText(testLine);
-    const textWidth = metrics.width;
     
-    if (textWidth < canvasWidth - x - 100) { // Python: if text_width < img.width - x - 100
-      currentLine += word + " ";
+    if (metrics.width > maxWidth && currentLine !== '') {
+      // Draw current line and start new one
+      ctx.fillText(currentLine.trim(), startX, y);
+      currentLine = word + ' ';
+      y += lineHeight;
     } else {
-      lines.push(currentLine.trim());
-      currentLine = word + " ";
+      currentLine = testLine;
     }
   }
-  lines.push(currentLine.trim());
   
-  // Draw each line (similar to Python for line in lines)
-  for (const line of lines) {
-    ctx.fillText(line, x, y);
-    const lineMetrics = ctx.measureText(line);
-    const textHeight = lineMetrics.actualBoundingBoxAscent + lineMetrics.actualBoundingBoxDescent;
-    y += textHeight; // Python: y += text_height
-    y += 11;         // Python: y += 11
+  // Draw the last line
+  if (currentLine.trim() !== '') {
+    ctx.fillText(currentLine.trim(), startX, y);
   }
+  
+  // Reset shadow
+  ctx.shadowColor = 'transparent';
+  ctx.shadowBlur = 0;
+  ctx.shadowOffsetX = 0;
+  ctx.shadowOffsetY = 0;
 }
 
 /**
@@ -849,6 +892,64 @@ function formatDate(dateString) {
 }
 
 // ...existing code...
+/**
+ * Add QR code to template (positioned properly over background)
+ */
+async function addQRCodeToTemplate(ctx, refNo, verificationUrl, canvasWidth, canvasHeight) {
+  try {
+    // Generate QR code as buffer
+    const qrCodeBuffer = await QRCode.toBuffer(verificationUrl, {
+      width: 120,
+      margin: 1,
+      color: {
+        dark: '#000000',
+        light: '#FFFFFF'
+      }
+    });
+    // Load QR code as image
+    const qrImage = await loadImage(qrCodeBuffer);
+    // Position QR code in bottom-right corner with proper margin
+    const qrSize = 100;
+    const margin = 30;
+    const qrX = canvasWidth - qrSize - margin;
+    const qrY = canvasHeight - qrSize - margin;
+    // Add white background behind QR code for better visibility
+    ctx.fillStyle = 'white';
+    ctx.fillRect(qrX - 5, qrY - 5, qrSize + 10, qrSize + 10);
+    // Add thin border around QR code
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(qrX - 5, qrY - 5, qrSize + 10, qrSize + 10);
+    // Draw QR code
+    ctx.drawImage(qrImage, qrX, qrY, qrSize, qrSize);
+    // Add reference number below QR code
+    ctx.fillStyle = '#000000';
+    ctx.font = '12px Times, serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(refNo, qrX + qrSize/2, qrY + qrSize + 15);
+    console.log('✅ QR code added to certificate template');
+  } catch (error) {
+    console.warn('⚠️ QR code generation failed:', error.message);
+    // Fallback: Draw placeholder QR area
+    const qrSize = 100;
+    const margin = 30;
+    const qrX = canvasWidth - qrSize - margin;
+    const qrY = canvasHeight - qrSize - margin;
+    ctx.fillStyle = 'white';
+    ctx.fillRect(qrX, qrY, qrSize, qrSize);
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(qrX, qrY, qrSize, qrSize);
+    // Add "QR" text
+    ctx.fillStyle = '#000000';
+    ctx.font = '16px Arial, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('QR', qrX + qrSize/2, qrY + qrSize/2);
+    // Add reference number
+    ctx.font = '12px Times, serif';
+    ctx.fillText(refNo, qrX + qrSize/2, qrY + qrSize + 15);
+  }
+}
     
     // Create a simple PDF using PDFKit without canvas dependency
     const PDFDocument = require('pdfkit');
