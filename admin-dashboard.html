@@ -209,7 +209,7 @@
                 const statsContainer = document.getElementById('stats');
                 
                 // Handle different response structures
-                const totalSummary = data.totalSummary || {
+                const totalSummary = data.overview || {
                     pending: 0,
                     generated: 0,
                     issued: 0,
@@ -288,7 +288,7 @@
                             <tbody>
                                 ${data.certificates.map(cert => `
                                     <tr>
-                                        <td>${cert.cert_type || cert.certificate_type || 'N/A'}</td>
+                                        <td>${cert.certificate_type || cert.cert_type || 'N/A'}</td>
                                         <td>${cert.full_name || cert.name || 'N/A'}</td>
                                         <td>${cert.email || 'N/A'}</td>
                                         <td>${cert.course_name || cert.course_domain || cert.domain || 'N/A'}</td>
@@ -296,7 +296,7 @@
                                         <td>${cert.certificate_ref_no || cert.reference_number || 'Not generated'}</td>
                                         <td>
                                             ${cert.status === 'pending' ? 
-                                                `<button class="generate" onclick="generateCertificate('${cert.cert_type || cert.certificate_type}', '${cert.certificate_id || cert.id}')">Generate</button>` :
+                                                `<button class="generate" onclick="generateCertificate('${cert.certificate_type || cert.cert_type}', '${cert.id || cert.certificate_id}')">Generate</button>` :
                                                 `<span style="color: #28a745;">✓ ${cert.status}</span>`
                                             }
                                         </td>
@@ -381,7 +381,7 @@
                     
                     for (const cert of data.certificates) {
                         try {
-                            const genResponse = await fetch(`${API_BASE}/certificates/generate/${cert.cert_type}/${cert.certificate_id}`, {
+                            const genResponse = await fetch(`${API_BASE}/certificates/generate/${cert.certificate_type}/${cert.id}`, {
                                 method: 'POST'
                             });
                             

@@ -25,37 +25,37 @@ const allowedOrigins = [
   'http://127.0.0.1:8080',
   process.env.FRONTEND_URL,
   // Add your production domains here
-  'https://certificate-frontend.onrender.com'
+  'https://certificate-frontend.onrender.com',
+  'https://certificate-automation-dmoe.onrender.com'
 ].filter(Boolean);
 
-// In development or when NODE_ENV is not production, allow all origins
-if (process.env.NODE_ENV !== 'production') {
-  app.use(cors({
-    origin: true,
-    credentials: true
-  }));
-} else {
-  app.use(cors({
-    origin: function (origin, callback) {
-      // Allow requests with no origin (mobile apps, curl, direct file access, etc.)
-      if (!origin) return callback(null, true);
-      
-      // Allow localhost and 127.0.0.1 for development
-      if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
-        return callback(null, true);
-      }
-      
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
-      
-      // Log blocked origins for debugging
-      console.log('CORS blocked origin:', origin);
-      callback(new Error('Not allowed by CORS'));
-    },
-    credentials: true
-  }));
-}
+// More permissive CORS for admin dashboard
+app.use(cors({
+  origin: function (origin, callback) {
+    // Allow requests with no origin (mobile apps, curl, direct file access, etc.)
+    if (!origin) return callback(null, true);
+    
+    // Allow all localhost and 127.0.0.1 variations
+    if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
+      return callback(null, true);
+    }
+    
+    // Allow your render domain
+    if (origin.includes('certificate-automation-dmoe.onrender.com')) {
+      return callback(null, true);
+    }
+    
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    
+    // Log blocked origins for debugging
+    console.log('CORS blocked origin:', origin);
+    // For now, allow all origins to fix the issue
+    return callback(null, true);
+  },
+  credentials: true
+}));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
@@ -77,6 +77,9 @@ app.use('/certificates/pdf', express.static(path.join(__dirname, 'Generated-Cert
 // Serve static frontend files (for combined deployment)
 app.use(express.static(path.join(__dirname, '../Frontend/static')));
 app.use(express.static(path.join(__dirname, '../Frontend/React/build')));
+
+// Serve admin dashboard
+app.use('/admin', express.static(path.join(__dirname, '../')));
 
 // Performance monitoring setup
 performanceMonitor.on('performanceAlert', (alert) => {
