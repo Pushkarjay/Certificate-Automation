@@ -399,17 +399,17 @@ async function generateSimpleCertificate(certificateData) {
  */
 async function generateHTMLCertificate(certificateData, imgPath, pdfPath, refNo, verificationUrl, qrCodeData) {
   try {
-    // Create HTML certificate content
+    // Create HTML certificate content matching SURE Trust template
     const htmlContent = `
 <!DOCTYPE html>
 <html>
 <head>
     <style>
         body {
-            font-family: 'Georgia', serif;
+            font-family: 'Times New Roman', serif;
             margin: 0;
-            padding: 40px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            background: #f5f5f5;
             min-height: 100vh;
             display: flex;
             justify-content: center;
@@ -419,92 +419,133 @@ async function generateHTMLCertificate(certificateData, imgPath, pdfPath, refNo,
             background: white;
             width: 800px;
             height: 600px;
-            border: 10px solid #2c3e50;
-            border-radius: 20px;
-            padding: 40px;
-            text-align: center;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+            border: 3px solid #000;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
             position: relative;
+            box-sizing: border-box;
         }
-        .title {
-            font-size: 48px;
-            font-weight: bold;
-            color: #2c3e50;
+        .alphabet {
+            font-size: 12px;
+            text-align: center;
+            margin-bottom: 10px;
+            letter-spacing: 2px;
+            color: #333;
+        }
+        .header {
+            text-align: center;
             margin-bottom: 30px;
-            text-transform: uppercase;
-            letter-spacing: 3px;
+        }
+        .sure-trust {
+            font-size: 32px;
+            font-weight: bold;
+            color: #000;
+            margin-bottom: 5px;
         }
         .subtitle {
-            font-size: 24px;
-            color: #7f8c8d;
-            margin-bottom: 40px;
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 20px;
         }
-        .name {
-            font-size: 42px;
-            font-weight: bold;
-            color: #e74c3c;
-            margin: 30px 0;
-            text-transform: uppercase;
-            letter-spacing: 2px;
+        .certificate-title {
+            font-size: 18px;
+            color: #000;
+            margin-bottom: 20px;
         }
-        .course {
+        .recipient-name {
             font-size: 28px;
-            color: #3498db;
-            margin: 20px 0;
             font-weight: bold;
+            color: #000;
+            margin: 20px 0;
+            text-decoration: underline;
         }
-        .batch {
-            font-size: 20px;
-            color: #27ae60;
-            margin: 15px 0;
+        .content {
+            font-size: 14px;
+            line-height: 1.6;
+            text-align: justify;
+            margin: 20px 0;
+            color: #333;
         }
-        .footer {
-            position: absolute;
-            bottom: 20px;
-            left: 40px;
-            right: 40px;
+        .signatures {
             display: flex;
             justify-content: space-between;
-            align-items: center;
+            margin-top: 40px;
+            margin-bottom: 20px;
         }
-        .ref-no {
-            font-size: 14px;
-            color: #7f8c8d;
+        .signature-block {
+            text-align: center;
+            flex: 1;
+            margin: 0 10px;
         }
-        .qr-placeholder {
+        .signature-line {
+            border-bottom: 1px solid #000;
+            width: 150px;
+            margin: 40px auto 5px;
+        }
+        .signature-title {
+            font-size: 12px;
+            font-weight: bold;
+            margin-bottom: 3px;
+        }
+        .signature-subtitle {
+            font-size: 10px;
+            color: #666;
+        }
+        .qr-code {
+            position: absolute;
+            bottom: 30px;
+            right: 30px;
+        }
+        .qr-code img {
             width: 80px;
             height: 80px;
-            border: 2px solid #bdc3c7;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 10px;
-            color: #7f8c8d;
-        }
-        .date {
-            font-size: 16px;
-            color: #34495e;
-            margin-top: 20px;
+            border: 1px solid #ccc;
         }
     </style>
 </head>
 <body>
     <div class="certificate">
-        <div class="title">Certificate of Completion</div>
-        <div class="subtitle">This is to certify that</div>
-        <div class="name">${certificateData.name}</div>
-        <div class="subtitle">has successfully completed</div>
-        <div class="course">${certificateData.course}</div>
-        <div class="batch">Batch: ${certificateData.batch}</div>
-        <div class="date">Date: ${new Date().toLocaleDateString()}</div>
+        <div class="alphabet">ABCDEFGHIJKLMNOPQRSTUVWXYZ<br>abcdefghijklmnopqrstuvwxyz</div>
         
-        <div class="footer">
-            <div class="ref-no">Reference: ${refNo}</div>
-            <div class="qr-code">
-                <img src="${qrCodeData}" alt="QR Code for Certificate Verification" style="width: 80px; height: 80px; border: 2px solid #bdc3c7; border-radius: 5px;"/>
-                <div style="font-size: 10px; color: #7f8c8d; text-align: center; margin-top: 5px;">Scan to Verify</div>
+        <div class="header">
+            <div class="sure-trust">SURE Trust</div>
+            <div class="subtitle">(Skill Upgradation for Rural - Youth Empowerment)</div>
+            <div class="certificate-title">This Certificate is issued to</div>
+        </div>
+        
+        <div class="recipient-name">${certificateData.name}</div>
+        
+        <div class="content">
+            For successful completion of four months training in "${certificateData.course}" from ${formatDate(certificateData.startDate)} to ${formatDate(certificateData.endDate)} securing ${certificateData.gpa || '8.6'} GPA, attending the mandatory "Life Skills Training" sessions, and completing the services to community launched by SURE Trust.
+        </div>
+        
+        <div class="signatures">
+            <div class="signature-block">
+                <div class="signature-line"></div>
+                <div class="signature-title">Founder &</div>
+                <div class="signature-title">Executive Director</div>
+                <div class="signature-subtitle">- SURE Trust</div>
+            </div>
+            
+            <div class="signature-block">
+                <div class="signature-line"></div>
+                <div class="signature-title">Trainer 1</div>
+                <div class="signature-subtitle">Designation,</div>
+                <div class="signature-subtitle">Company</div>
+            </div>
+            
+            <div class="signature-block">
+                <div class="signature-line"></div>
+                <div class="signature-title">Trainer 2</div>
+                <div class="signature-subtitle">Designation,</div>
+                <div class="signature-subtitle">Company</div>
             </div>
         </div>
+        
+        ${qrCodeData ? `
+        <div class="qr-code">
+            <img src="${qrCodeData}" alt="QR Code for Certificate Verification"/>
+        </div>` : ''}
     </div>
 </body>
 </html>`;
@@ -726,74 +767,72 @@ async function insertContentOnCanvas(ctx, certificateData, canvasWidth) {
 }
 
 /**
- * Create SVG certificate (fallback method)
+ * Create SVG certificate (fallback method) - SURE Trust Template
  */
 function createCertificateSVG(certificateData, refNo, verificationUrl, qrCodeData = null) {
   return `
 <svg width="800" height="600" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#667eea;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#764ba2;stop-opacity:1" />
-    </linearGradient>
-    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="4" dy="8" stdDeviation="6" flood-color="#000" flood-opacity="0.3"/>
-    </filter>
+    <style>
+      .cert-text { font-family: 'Times New Roman', serif; }
+      .bold { font-weight: bold; }
+    </style>
   </defs>
   
   <!-- Background -->
-  <rect width="800" height="600" fill="url(#bg)"/>
+  <rect width="800" height="600" fill="white"/>
   
-  <!-- White certificate area with shadow -->
-  <rect x="50" y="50" width="700" height="500" fill="white" stroke="#2c3e50" stroke-width="8" rx="15" filter="url(#shadow)"/>
+  <!-- Border -->
+  <rect x="10" y="10" width="780" height="580" fill="none" stroke="black" stroke-width="3"/>
   
-  <!-- SURE Trust Logo Area -->
-  <rect x="70" y="70" width="80" height="60" fill="#f8f9fa" stroke="#dee2e6" stroke-width="1" rx="5"/>
-  <text x="110" y="95" font-family="Arial, sans-serif" font-size="10" font-weight="bold" text-anchor="middle" fill="#6c757d">SURE</text>
-  <text x="110" y="110" font-family="Arial, sans-serif" font-size="10" font-weight="bold" text-anchor="middle" fill="#6c757d">TRUST</text>
+  <!-- Alphabet Header -->
+  <text x="400" y="40" font-family="Times New Roman, serif" font-size="12" text-anchor="middle" fill="black" letter-spacing="2px">ABCDEFGHIJKLMNOPQRSTUVWXYZ</text>
+  <text x="400" y="55" font-family="Times New Roman, serif" font-size="12" text-anchor="middle" fill="black" letter-spacing="2px">abcdefghijklmnopqrstuvwxyz</text>
   
-  <!-- Title -->
-  <text x="400" y="130" font-family="Georgia, serif" font-size="36" font-weight="bold" text-anchor="middle" fill="#2c3e50">CERTIFICATE OF COMPLETION</text>
+  <!-- SURE Trust Header -->
+  <text x="400" y="110" font-family="Times New Roman, serif" font-size="32" font-weight="bold" text-anchor="middle" fill="black">SURE Trust</text>
+  <text x="400" y="130" font-family="Times New Roman, serif" font-size="14" text-anchor="middle" fill="#666">(Skill Upgradation for Rural - Youth Empowerment)</text>
   
-  <!-- Decorative line -->
-  <line x1="200" y1="145" x2="600" y2="145" stroke="#e74c3c" stroke-width="3"/>
+  <!-- Certificate Title -->
+  <text x="400" y="160" font-family="Times New Roman, serif" font-size="18" text-anchor="middle" fill="black">This Certificate is issued to</text>
   
-  <!-- Subtitle -->
-  <text x="400" y="180" font-family="Georgia, serif" font-size="18" text-anchor="middle" fill="#7f8c8d">This is to certify that</text>
+  <!-- Recipient Name -->
+  <text x="400" y="210" font-family="Times New Roman, serif" font-size="28" font-weight="bold" text-anchor="middle" fill="black" text-decoration="underline">${certificateData.name}</text>
   
-  <!-- Name -->
-  <text x="400" y="230" font-family="Georgia, serif" font-size="32" font-weight="bold" text-anchor="middle" fill="#e74c3c">${certificateData.name.toUpperCase()}</text>
+  <!-- Certificate Content -->
+  <text x="50" y="260" font-family="Times New Roman, serif" font-size="14" fill="black">For successful completion of four months training in "${certificateData.course}"</text>
+  <text x="50" y="280" font-family="Times New Roman, serif" font-size="14" fill="black">from ${formatDate(certificateData.startDate)} to ${formatDate(certificateData.endDate)} securing ${certificateData.gpa || '8.6'} GPA,</text>
+  <text x="50" y="300" font-family="Times New Roman, serif" font-size="14" fill="black">attending the mandatory "Life Skills Training" sessions, and completing</text>
+  <text x="50" y="320" font-family="Times New Roman, serif" font-size="14" fill="black">the services to community launched by SURE Trust.</text>
   
-  <!-- Completion text -->
-  <text x="400" y="270" font-family="Georgia, serif" font-size="18" text-anchor="middle" fill="#7f8c8d">has successfully completed the course</text>
+  <!-- Signature Blocks -->
+  <!-- Founder & Executive Director -->
+  <line x1="80" y1="420" x2="230" y2="420" stroke="black" stroke-width="1"/>
+  <text x="155" y="440" font-family="Times New Roman, serif" font-size="12" font-weight="bold" text-anchor="middle" fill="black">Founder &</text>
+  <text x="155" y="455" font-family="Times New Roman, serif" font-size="12" font-weight="bold" text-anchor="middle" fill="black">Executive Director</text>
+  <text x="155" y="470" font-family="Times New Roman, serif" font-size="10" text-anchor="middle" fill="#666">- SURE Trust</text>
   
-  <!-- Course -->
-  <text x="400" y="320" font-family="Georgia, serif" font-size="24" font-weight="bold" text-anchor="middle" fill="#3498db">${certificateData.course}</text>
+  <!-- Trainer 1 -->
+  <line x1="280" y1="420" x2="430" y2="420" stroke="black" stroke-width="1"/>
+  <text x="355" y="440" font-family="Times New Roman, serif" font-size="12" font-weight="bold" text-anchor="middle" fill="black">Trainer 1</text>
+  <text x="355" y="455" font-family="Times New Roman, serif" font-size="10" text-anchor="middle" fill="#666">Designation,</text>
+  <text x="355" y="470" font-family="Times New Roman, serif" font-size="10" text-anchor="middle" fill="#666">Company</text>
   
-  <!-- Batch -->
-  <text x="400" y="360" font-family="Georgia, serif" font-size="16" text-anchor="middle" fill="#27ae60">Batch: ${certificateData.batch}</text>
+  <!-- Trainer 2 -->
+  <line x1="480" y1="420" x2="630" y2="420" stroke="black" stroke-width="1"/>
+  <text x="555" y="440" font-family="Times New Roman, serif" font-size="12" font-weight="bold" text-anchor="middle" fill="black">Trainer 2</text>
+  <text x="555" y="455" font-family="Times New Roman, serif" font-size="10" text-anchor="middle" fill="#666">Designation,</text>
+  <text x="555" y="470" font-family="Times New Roman, serif" font-size="10" text-anchor="middle" fill="#666">Company</text>
   
-  <!-- Date -->
-  <text x="400" y="390" font-family="Georgia, serif" font-size="14" text-anchor="middle" fill="#34495e">Date: ${new Date().toLocaleDateString()}</text>
-  
-  <!-- Reference number -->
-  <text x="70" y="530" font-family="Georgia, serif" font-size="12" fill="#7f8c8d">Reference: ${refNo}</text>
-  
-  <!-- QR Code area -->
+  <!-- QR Code -->
   ${qrCodeData ? 
-    `<image x="680" y="460" width="80" height="80" href="${qrCodeData}" style="border: 2px solid #bdc3c7; border-radius: 5px;"/>
-     <text x="720" y="555" font-family="Arial, sans-serif" font-size="8" text-anchor="middle" fill="#7f8c8d">Scan to Verify</text>` :
-    `<rect x="680" y="460" width="80" height="80" fill="#f8f9fa" stroke="#bdc3c7" stroke-width="2" rx="5"/>
-     <text x="720" y="490" font-family="Arial, sans-serif" font-size="8" text-anchor="middle" fill="#7f8c8d">QR Code</text>
-     <text x="720" y="505" font-family="Arial, sans-serif" font-size="8" text-anchor="middle" fill="#7f8c8d">Scan to</text>
-     <text x="720" y="520" font-family="Arial, sans-serif" font-size="8" text-anchor="middle" fill="#7f8c8d">Verify</text>`
+    `<image x="700" y="500" width="80" height="80" href="${qrCodeData}" style="border: 1px solid #ccc;"/>` :
+    `<rect x="700" y="500" width="80" height="80" fill="none" stroke="#ccc" stroke-width="1"/>
+     <text x="740" y="545" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#666">QR Code</text>`
   }
   
-  <!-- Footer -->
-  <text x="400" y="510" font-family="Georgia, serif" font-size="12" text-anchor="middle" fill="#95a5a6">SURE Trust Certificate System</text>
-  
-  <!-- Verification URL (small) -->
-  <text x="70" y="510" font-family="Arial, sans-serif" font-size="8" fill="#adb5bd">Verify: ${verificationUrl}</text>
+  <!-- Reference Number -->
+  <text x="50" y="580" font-family="Times New Roman, serif" font-size="10" fill="#666">Reference: ${refNo}</text>
 </svg>`;
 }
 
