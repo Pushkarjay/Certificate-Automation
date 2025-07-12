@@ -119,9 +119,9 @@
             color: #856404;
         }
         
-        .status.generated {
-            background: #d4edda;
-            color: #155724;
+        .status.revoked {
+            background: #f8d7da;
+            color: #721c24;
         }
         
         .loading {
@@ -269,6 +269,7 @@
                     pending: 0,
                     generated: 0,
                     issued: 0,
+                    revoked: 0,
                     total: 0
                 };
                 
@@ -286,6 +287,10 @@
                     <div class="stat-card">
                         <div class="stat-number">${totalSummary.issued || 0}</div>
                         <div>Issued</div>
+                    </div>
+                    <div class="stat-card" style="background: linear-gradient(135deg, #dc3545, #c82333);">
+                        <div class="stat-number">${totalSummary.revoked || 0}</div>
+                        <div>Revoked</div>
                     </div>
                     <div class="stat-card">
                         <div class="stat-number">${totalSummary.total || 0}</div>
@@ -312,6 +317,7 @@
                     pending: certificates.filter(c => c.status === 'pending').length,
                     generated: certificates.filter(c => c.status === 'generated').length,
                     issued: certificates.filter(c => c.status === 'issued').length,
+                    revoked: certificates.filter(c => c.status === 'revoked').length,
                     total: certificates.length
                 };
                 
@@ -328,6 +334,10 @@
                     <div class="stat-card">
                         <div class="stat-number">${stats.issued}</div>
                         <div>Issued</div>
+                    </div>
+                    <div class="stat-card" style="background: linear-gradient(135deg, #dc3545, #c82333);">
+                        <div class="stat-number">${stats.revoked}</div>
+                        <div>Revoked</div>
                     </div>
                     <div class="stat-card">
                         <div class="stat-number">${stats.total}</div>
@@ -397,6 +407,11 @@
                                         <td>
                                             ${cert.status === 'pending' ? 
                                                 `<button class="generate" data-cert-id="${cert.id}">Generate</button>` :
+                                                cert.status === 'revoked' ?
+                                                    `<div>
+                                                        <span style="color: #dc3545;">❌ Revoked</span><br>
+                                                        <small style="color: #666;">Certificate has been revoked</small>
+                                                    </div>` :
                                                 cert.verification_url ? 
                                                     `<div>
                                                         <a href="${cert.verification_url}" target="_blank" style="color: #28a745; text-decoration: none;">View Certificate</a><br>
@@ -406,9 +421,17 @@
                                                                 <a href="/certificates/pdf/${cert.certificate_ref_no}.pdf" target="_blank" style="color: #dc3545; font-size: 0.8em;" class="cert-file-link">PDF</a>
                                                             </div>` : ''
                                                         }
-                                                        <small style="color: #666;">Ref: ${cert.certificate_ref_no || 'N/A'}</small>
+                                                        <small style="color: #666;">Ref: ${cert.certificate_ref_no || 'N/A'}</small><br>
+                                                        ${(cert.status === 'generated' || cert.status === 'issued') ? 
+                                                            `<button class="revoke" data-cert-id="${cert.id}" style="background: #dc3545; color: white; font-size: 0.8em; padding: 4px 8px; margin-top: 5px; border: none; border-radius: 3px; cursor: pointer;">Revoke</button>` : ''
+                                                        }
                                                     </div>` :
-                                                    `<span style="color: #28a745;">✓ ${cert.status}</span>`
+                                                    `<div>
+                                                        <span style="color: #28a745;">✓ ${cert.status}</span>
+                                                        ${(cert.status === 'generated' || cert.status === 'issued') ? 
+                                                            `<br><button class="revoke" data-cert-id="${cert.id}" style="background: #dc3545; color: white; font-size: 0.8em; padding: 4px 8px; margin-top: 5px; border: none; border-radius: 3px; cursor: pointer;">Revoke</button>` : ''
+                                                        }
+                                                    </div>`
                                             }
                                         </td>
                                     </tr>
@@ -465,6 +488,13 @@
                 event.preventDefault();
                 event.stopPropagation();
                 generateCertificate(event.target.dataset.certId);
+            }
+            
+            // Handle revoke certificate buttons
+            if (event.target.classList.contains('revoke') && event.target.dataset.certId) {
+                event.preventDefault();
+                event.stopPropagation();
+                revokeCertificate(event.target.dataset.certId);
             }
             
             // Handle certificate file links (prevent propagation)
@@ -534,6 +564,41 @@
                 }
             } catch (error) {
                 showMessage('Error in batch generation: ' + error.message, 'error');
+            }
+        }
+        
+        // Revoke certificate
+        async function revokeCertificate(id) {
+            if (!confirm('Are you sure you want to revoke this certificate? This action cannot be undone and will invalidate the certificate.')) {
+                return;
+            }
+            
+            try {
+                showMessage('Revoking certificate...', 'loading');
+                
+                const response = await fetch(`${API_BASE}/certificates/revoke/${id}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        reason: 'Revoked by administrator',
+                        revokedBy: 'admin'
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showMessage(`Certificate revoked successfully! Reference: ${data.certificate_ref_no || 'N/A'}`, 'success');
+                    loadCertificates();
+                    loadStats();
+                } else {
+                    showMessage('Error revoking certificate: ' + (data.error || data.message || 'Unknown error occurred'), 'error');
+                }
+            } catch (error) {
+                console.error('Certificate revocation error:', error);
+                showMessage('Error revoking certificate: ' + error.message + '. Please check your connection and try again.', 'error');
             }
         }
         
