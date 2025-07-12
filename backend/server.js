@@ -59,6 +59,9 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
+// Trust proxy for rate limiting behind reverse proxy (Render)
+app.set('trust proxy', 1);
+
 // Rate limiting (SRS NFR3: Support 10,000+ certificates)
 const limiter = rateLimit({
   windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000, // 15 minutes

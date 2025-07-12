@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { dbService } = require('../server');
+const dbService = require('../services/databaseService');
 const Joi = require('joi');
 
 // Flexible validation schema for form submissions
