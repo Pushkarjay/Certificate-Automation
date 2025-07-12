@@ -299,45 +299,226 @@ async function ensureDirectoryExists(dirPath) {
 
 /**
  * Simplified certificate generation for cloud deployment
- * Skips canvas/image generation that requires native dependencies
+ * Creates actual certificate files using available templates
  */
 async function generateSimpleCertificate(certificateData) {
   try {
-    console.log('🎓 Generating simple certificate for:', certificateData.name);
+    console.log('🎓 Generating certificate for:', certificateData.name);
     
-    // Generate reference number
-    const refNo = `${certificateData.type.toUpperCase()}_${certificateData.course}_${new Date().getFullYear()}_${Date.now()}`;
+    // Generate reference number if not provided
+    const refNo = certificateData.refNo || `${certificateData.type.toUpperCase()}_${certificateData.course.replace(/\s+/g, '').substring(0, 4).toUpperCase()}_${certificateData.batch}_${new Date().getFullYear()}_${Date.now().toString().substr(-4)}`;
     
     // Generate verification URL
-    const verificationUrl = `${process.env.VERIFICATION_BASE_URL || 'https://certificate-automation-dmoe.onrender.com/verify/'}${refNo}`;
+    const verificationUrl = certificateData.verificationUrl || `${process.env.VERIFICATION_BASE_URL || 'https://certificate-automation-dmoe.onrender.com/verify/'}${refNo}`;
     
     // Generate QR code as data URL
     const qrCodeData = await QRCode.toDataURL(verificationUrl);
     
-    // Create certificate data object (for now, just metadata)
-    const certificateInfo = {
-      referenceNumber: refNo,
-      holderName: certificateData.name,
-      course: certificateData.course,
-      batch: certificateData.batch,
-      type: certificateData.type,
-      verificationUrl: verificationUrl,
-      qrCodeData: qrCodeData,
-      issuedDate: new Date().toISOString(),
-      template: certificateData.templatePath || 'default.jpg'
-    };
+    // Ensure output directories exist
+    const imgDir = path.join(__dirname, '../Generated-Certificates/IMG');
+    const pdfDir = path.join(__dirname, '../Generated-Certificates/PDF');
+    await ensureDirectoryExists(imgDir);
+    await ensureDirectoryExists(pdfDir);
     
-    // For now, return paths as if files were generated
-    // In a full implementation, these would be actual file paths
+    // Generate filenames
+    const safeRefNo = refNo.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const imgFilename = `certificate_${safeRefNo}.jpg`;
+    const pdfFilename = `certificate_${safeRefNo}.pdf`;
+    const imgPath = path.join(imgDir, imgFilename);
+    const pdfPath = path.join(pdfDir, pdfFilename);
+    
+    try {
+      // Try to use the full certificate generator with templates
+      const templatePath = path.join(__dirname, '../Certificate_Templates', certificateData.templatePath || 'G28 Python.jpg');
+      
+      // Check if template exists
+      await fs.access(templatePath);
+      
+      // Load template image
+      const templateImage = await loadImage(templatePath);
+      
+      // Create canvas with template dimensions
+      const canvas = createCanvas(templateImage.width, templateImage.height);
+      const ctx = canvas.getContext('2d');
+      
+      // Draw template
+      ctx.drawImage(templateImage, 0, 0);
+      
+      // Add name to certificate
+      const name = certificateData.name;
+      ctx.font = 'bold 60px Arial, sans-serif';
+      ctx.fillStyle = '#000000';
+      ctx.textAlign = 'center';
+      
+      // Center the name horizontally, position it appropriately vertically
+      const centerX = canvas.width / 2;
+      const nameY = canvas.height * 0.45; // Adjust this based on your template
+      ctx.fillText(name, centerX, nameY);
+      
+      // Add course information
+      ctx.font = '30px Arial, sans-serif';
+      const courseText = `Course: ${certificateData.course}`;
+      const courseY = nameY + 60;
+      ctx.fillText(courseText, centerX, courseY);
+      
+      // Add batch information
+      const batchText = `Batch: ${certificateData.batch}`;
+      const batchY = courseY + 40;
+      ctx.fillText(batchText, centerX, batchY);
+      
+      // Add reference number
+      ctx.font = '20px Arial, sans-serif';
+      const refText = `Reference: ${refNo}`;
+      const refY = canvas.height - 50;
+      ctx.fillText(refText, centerX, refY);
+      
+      // Generate QR code and add it to canvas
+      const qrSize = 100;
+      const qrX = canvas.width - qrSize - 50;
+      const qrY = 50;
+      
+      // Create QR code image
+      const qrCodeBuffer = await QRCode.toBuffer(verificationUrl, { width: qrSize });
+      const qrImage = await loadImage(qrCodeBuffer);
+      ctx.drawImage(qrImage, qrX, qrY, qrSize, qrSize);
+      
+      // Save IMG file
+      const imgBuffer = canvas.toBuffer('image/jpeg', { quality: 0.95 });
+      await fs.writeFile(imgPath, imgBuffer);
+      
+      // Generate PDF
+      const pdfDoc = new PDFDocument({ size: [canvas.width, canvas.height] });
+      const pdfStream = require('fs').createWriteStream(pdfPath);
+      pdfDoc.pipe(pdfStream);
+      
+      // Add the certificate image to PDF
+      pdfDoc.image(imgBuffer, 0, 0, { width: canvas.width, height: canvas.height });
+      
+      pdfDoc.end();
+      
+      // Wait for PDF to finish writing
+      await new Promise((resolve, reject) => {
+        pdfStream.on('finish', resolve);
+        pdfStream.on('error', reject);
+      });
+      
+      console.log('✅ Certificate files generated:', { imgPath, pdfPath });
+      
+    } catch (templateError) {
+      console.warn('⚠️ Template not found or canvas error, generating text-based certificate:', templateError.message);
+      
+      // Fallback: Generate simple text-based certificates
+      await generateTextBasedCertificate(certificateData, imgPath, pdfPath, refNo, verificationUrl);
+    }
+    
+    // Return actual file paths
     return {
       success: true,
-      imagePath: `Generated-Certificates/IMG/certificate_${refNo}.jpg`,
-      pdfPath: `Generated-Certificates/PDF/certificate_${refNo}.pdf`,
-      certificateData: certificateInfo,
-      message: 'Certificate generated successfully (simplified version)'
+      imagePath: `Generated-Certificates/IMG/${imgFilename}`,
+      pdfPath: `Generated-Certificates/PDF/${pdfFilename}`,
+      certificateData: {
+        referenceNumber: refNo,
+        holderName: certificateData.name,
+        course: certificateData.course,
+        batch: certificateData.batch,
+        type: certificateData.type,
+        verificationUrl: verificationUrl,
+        qrCodeData: qrCodeData,
+        issuedDate: new Date().toISOString(),
+        template: certificateData.templatePath || 'default.jpg'
+      },
+      message: 'Certificate files generated successfully'
     };
     
   } catch (error) {
+    console.error('❌ Error in certificate generation:', error);
+    throw error;
+  }
+}
+
+/**
+ * Generate text-based certificate as fallback
+ */
+async function generateTextBasedCertificate(certificateData, imgPath, pdfPath, refNo, verificationUrl) {
+  try {
+    // Create a simple canvas with white background
+    const canvas = createCanvas(1200, 800);
+    const ctx = canvas.getContext('2d');
+    
+    // White background
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    // Border
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 10;
+    ctx.strokeRect(50, 50, canvas.width - 100, canvas.height - 100);
+    
+    // Title
+    ctx.fillStyle = '#000000';
+    ctx.font = 'bold 48px Arial, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('Certificate of Completion', canvas.width / 2, 150);
+    
+    // Name
+    ctx.font = 'bold 36px Arial, sans-serif';
+    ctx.fillText(`This is to certify that`, canvas.width / 2, 250);
+    
+    ctx.font = 'bold 48px Arial, sans-serif';
+    ctx.fillStyle = '#0066cc';
+    ctx.fillText(certificateData.name, canvas.width / 2, 320);
+    
+    // Course details
+    ctx.fillStyle = '#000000';
+    ctx.font = '28px Arial, sans-serif';
+    ctx.fillText(`has successfully completed the course`, canvas.width / 2, 400);
+    
+    ctx.font = 'bold 32px Arial, sans-serif';
+    ctx.fillStyle = '#0066cc';
+    ctx.fillText(certificateData.course, canvas.width / 2, 450);
+    
+    ctx.fillStyle = '#000000';
+    ctx.font = '24px Arial, sans-serif';
+    ctx.fillText(`Batch: ${certificateData.batch}`, canvas.width / 2, 500);
+    
+    // Date
+    const currentDate = new Date().toLocaleDateString();
+    ctx.fillText(`Date: ${currentDate}`, canvas.width / 2, 550);
+    
+    // Reference number
+    ctx.font = '18px Arial, sans-serif';
+    ctx.fillText(`Reference: ${refNo}`, canvas.width / 2, 700);
+    
+    // Generate QR code
+    const qrCodeBuffer = await QRCode.toBuffer(verificationUrl, { width: 80 });
+    const qrImage = await loadImage(qrCodeBuffer);
+    ctx.drawImage(qrImage, canvas.width - 150, canvas.height - 130, 80, 80);
+    
+    // Save IMG file
+    const imgBuffer = canvas.toBuffer('image/jpeg', { quality: 0.95 });
+    await fs.writeFile(imgPath, imgBuffer);
+    
+    // Generate PDF
+    const pdfDoc = new PDFDocument({ size: [canvas.width, canvas.height] });
+    const pdfStream = require('fs').createWriteStream(pdfPath);
+    pdfDoc.pipe(pdfStream);
+    
+    pdfDoc.image(imgBuffer, 0, 0, { width: canvas.width, height: canvas.height });
+    pdfDoc.end();
+    
+    // Wait for PDF to finish writing
+    await new Promise((resolve, reject) => {
+      pdfStream.on('finish', resolve);
+      pdfStream.on('error', reject);
+    });
+    
+    console.log('✅ Text-based certificate generated successfully');
+    
+  } catch (error) {
+    console.error('❌ Error generating text-based certificate:', error);
+    throw error;
+  }
+}
     console.error('❌ Error in simplified certificate generation:', error);
     throw error;
   }
