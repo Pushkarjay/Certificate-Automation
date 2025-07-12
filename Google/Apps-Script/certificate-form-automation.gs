@@ -28,6 +28,13 @@ function onFormSubmit(e) {
   try {
     console.log('📝 Form submission triggered');
     
+    // Check if event object exists (for manual testing vs actual form submission)
+    if (!e || !e.response) {
+      console.log('⚠️ No event object or response found. This function should be triggered by form submission.');
+      console.log('💡 Use testAPIConnection() or setupScript() for manual testing.');
+      return;
+    }
+    
     // Get form response data
     const formResponse = e.response;
     const itemResponses = formResponse.getItemResponses();
@@ -82,123 +89,68 @@ function processFormResponses(itemResponses) {
     data[dbField] = answer;
   });
   
+  // Map role values to certificate types
+  if (data.certificate_type) {
+    const roleMapping = {
+      'Student': 'student',
+      'Intern (Trainee)': 'intern',
+      'Trainer': 'trainer'
+    };
+    data.certificate_type = roleMapping[data.certificate_type] || data.certificate_type.toLowerCase();
+  }
+  
+  // Set training mode based on certificate type (default assumption)
+  if (!data.training_mode) {
+    data.training_mode = 'online'; // Default for SURE Trust
+  }
+  
   return data;
 }
 
 /**
  * Map form question titles to database field names
- * Update this mapping based on your actual form questions
+ * Updated based on actual SURE Trust form structure
  */
 function getFieldMapping() {
   return {
-    // Personal Information
-    'Name': 'full_name',
-    'Full Name': 'full_name',
-    'Student Name': 'full_name',
-    'Participant Name': 'full_name',
-    
+    // Section 1 - Role Selection
     'Email': 'email_address',
-    'Email Address': 'email_address',
-    'E-mail': 'email_address',
+    'Choose Your Role': 'certificate_type',
     
-    'Phone': 'phone',
-    'Mobile Number': 'phone',
-    'Contact Number': 'phone',
+    // Common Fields (across all sections)
+    'Title': 'title',
+    'Email Address': 'email_address',
+    'FULL NAME': 'full_name',
+    'GENDER': 'gender',
+    'DATE OF BIRTH': 'date_of_birth',
+    'Phone Number ': 'phone', // Note: has trailing space in form
     'Phone Number': 'phone',
     
-    'Title': 'title',
-    'Salutation': 'title',
-    'Mr/Ms': 'title',
-    
-    'Date of Birth': 'date_of_birth',
-    'DOB': 'date_of_birth',
-    'Birth Date': 'date_of_birth',
-    
-    'Gender': 'gender',
-    'Sex': 'gender',
-    
-    // Address Information
-    'Address': 'address_line1',
-    'Address Line 1': 'address_line1',
-    'Street Address': 'address_line1',
-    
-    'City': 'city',
-    'State': 'state',
-    'Province': 'state',
-    'Country': 'country',
-    'Postal Code': 'postal_code',
-    'ZIP Code': 'postal_code',
-    'Pin Code': 'postal_code',
-    
-    // Educational/Professional
-    'Qualification': 'qualification',
-    'Education': 'qualification',
-    'Degree': 'qualification',
-    
-    'Institution': 'institution',
-    'College': 'institution',
-    'University': 'institution',
-    'School': 'institution',
-    
-    'Organization': 'organization',
-    'Company': 'organization',
-    'Employer': 'organization',
-    
-    'Position': 'position',
-    'Job Title': 'position',
-    'Designation': 'position',
-    
-    'Experience': 'experience_years',
-    'Years of Experience': 'experience_years',
-    'Work Experience': 'experience_years',
-    
     // Course Information
-    'Course': 'course_name',
-    'Course Name': 'course_name',
-    'Training Program': 'course_name',
-    'Program': 'course_name',
+    'Course/Domain': 'course_name',
     
+    // Section 2 - Trainer specific (no additional fields beyond common)
+    
+    // Section 3 - Intern (Trainee) specific
     'Batch': 'batch_initials',
-    'Batch Code': 'batch_initials',
-    'Batch Number': 'batch_initials',
-    
-    'Training Type': 'training_type',
-    'Course Type': 'training_type',
-    'Program Type': 'training_type',
-    
-    'Training Mode': 'training_mode',
-    'Mode of Training': 'training_mode',
-    
-    // Dates
-    'Start Date': 'start_date',
-    'Course Start Date': 'start_date',
-    'Training Start Date': 'training_start_date',
-    
-    'End Date': 'end_date',
-    'Course End Date': 'end_date',
-    'Training End Date': 'training_end_date',
-    
-    // Performance Metrics
+    'STRT DATE': 'start_date',
+    'END DATE': 'end_date',
     'GPA': 'gpa',
-    'CGPA': 'gpa',
-    'Grade Point Average': 'gpa',
     
-    'Attendance': 'attendance_percentage',
-    'Attendance %': 'attendance_percentage',
-    'Attendance Percentage': 'attendance_percentage',
+    // Section 4 - Student specific
+    'STRT DATE(FROM)': 'start_date',
+    'END DATE(TO)': 'end_date',
     
-    'Assessment Score': 'assessment_score',
-    'Test Score': 'assessment_score',
-    'Final Score': 'assessment_score',
-    'Score': 'assessment_score',
-    
-    'Grade': 'grade',
-    'Final Grade': 'grade',
-    
-    // Certificate Type
-    'Certificate Type': 'certificate_type',
-    'Type': 'certificate_type',
-    'Category': 'certificate_type'
+    // Alternative field names (for backward compatibility)
+    'Start Date': 'start_date',
+    'End Date': 'end_date',
+    'Full Name': 'full_name',
+    'Name': 'full_name',
+    'Gender': 'gender',
+    'Date of Birth': 'date_of_birth',
+    'Course': 'course_name',
+    'Training Program': 'course_name',
+    'Program': 'course_name'
   };
 }
 
@@ -358,23 +310,123 @@ function logError(functionName, error, eventData = null) {
  */
 function testAPIConnection() {
   const testData = {
+    // Form metadata
+    timestamp: new Date(),
+    response_id: 'test_response_' + Date.now(),
+    form_id: 'test_form',
+    
+    // Personal Information
+    title: 'Mr',
     full_name: 'Test User',
+    gender: 'MALE',
+    date_of_birth: '1990-01-01',
+    phone: '9876543210',
     email_address: 'test@example.com',
-    course_name: 'Test Course',
-    certificate_type: 'student',
-    timestamp: new Date()
+    
+    // Course Information
+    course_name: 'PYTHON',
+    batch_initials: 'G28',
+    certificate_type: 'student', // student, intern, trainer
+    training_mode: 'online',
+    
+    // Academic Information (for students/interns)
+    start_date: '2024-01-01',
+    end_date: '2024-03-31',
+    gpa: '8.5'
   };
   
-  console.log('🧪 Testing API connection...');
+  console.log('🧪 Testing API connection with SURE Trust form data...');
+  console.log('📊 Test data:', testData);
+  
   const result = sendToAPI(testData);
   
   if (result.success) {
     console.log('✅ API connection test successful!');
+    console.log('📋 Response:', result.data);
     return true;
   } else {
     console.log('❌ API connection test failed:', result.error);
     return false;
   }
+}
+
+/**
+ * Test different certificate types
+ */
+function testAllCertificateTypes() {
+  console.log('🧪 Testing all certificate types...');
+  
+  const baseData = {
+    timestamp: new Date(),
+    title: 'Mr',
+    full_name: 'Test User',
+    gender: 'MALE',
+    date_of_birth: '1990-01-01',
+    phone: '9876543210',
+    email_address: 'test@example.com',
+    course_name: 'PYTHON',
+    training_mode: 'online'
+  };
+  
+  // Test Student Certificate
+  console.log('📚 Testing Student Certificate...');
+  const studentData = {
+    ...baseData,
+    certificate_type: 'student',
+    batch_initials: 'G28',
+    start_date: '2024-01-01',
+    end_date: '2024-03-31',
+    gpa: '8.5',
+    response_id: 'test_student_' + Date.now()
+  };
+  
+  const studentResult = sendToAPI(studentData);
+  console.log('Student Result:', studentResult.success ? '✅' : '❌', studentResult.success ? studentResult.data : studentResult.error);
+  
+  // Test Intern Certificate
+  console.log('👨‍💼 Testing Intern Certificate...');
+  const internData = {
+    ...baseData,
+    certificate_type: 'intern',
+    batch_initials: 'G28',
+    start_date: '2024-01-01',
+    end_date: '2024-03-31',
+    gpa: '9.0',
+    response_id: 'test_intern_' + Date.now()
+  };
+  
+  const internResult = sendToAPI(internData);
+  console.log('Intern Result:', internResult.success ? '✅' : '❌', internResult.success ? internResult.data : internResult.error);
+  
+  // Test Trainer Certificate
+  console.log('👨‍🏫 Testing Trainer Certificate...');
+  const trainerData = {
+    ...baseData,
+    certificate_type: 'trainer',
+    response_id: 'test_trainer_' + Date.now()
+  };
+  
+  const trainerResult = sendToAPI(trainerData);
+  console.log('Trainer Result:', trainerResult.success ? '✅' : '❌', trainerResult.success ? trainerResult.data : trainerResult.error);
+  
+  return {
+    student: studentResult.success,
+    intern: internResult.success,
+    trainer: trainerResult.success
+  };
+}
+
+/**
+ * Quick test function to verify the script setup
+ */
+function quickTest() {
+  console.log('🔍 Running quick setup verification...');
+  console.log('🌐 API Base URL:', CONFIG.API_BASE_URL);
+  console.log('📝 Form Submit Endpoint:', CONFIG.FORM_SUBMIT_ENDPOINT);
+  console.log('📊 Sheet ID:', CONFIG.SHEET_ID);
+  
+  // Test API connection
+  return testAPIConnection();
 }
 
 /**

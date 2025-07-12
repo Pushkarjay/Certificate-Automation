@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { pool } = require('../server');
+const { dbService } = require('../server');
 const Joi = require('joi');
 
 // Flexible validation schema for form submissions
@@ -197,8 +197,6 @@ function normalizeGoogleFormData(formData) {
 
 // Function to insert form submission into database
 async function insertFormSubmission(data) {
-  const client = await pool.connect();
-  
   try {
     const fields = Object.keys(data).filter(key => data[key] !== undefined);
     const values = fields.map(key => data[key]);
@@ -210,11 +208,12 @@ async function insertFormSubmission(data) {
       RETURNING submission_id
     `;
     
-    const result = await client.query(query, values);
+    const result = await dbService.query(query, values);
     return result.rows[0].submission_id;
     
-  } finally {
-    client.release();
+  } catch (error) {
+    console.error('❌ Database insert error:', error);
+    throw error;
   }
 }
 
@@ -269,8 +268,8 @@ router.get('/', async (req, res) => {
     const countParams = params.slice(0, -2); // Remove limit and offset
 
     const [submissions, countResult] = await Promise.all([
-      pool.query(query, params),
-      pool.query(countQuery, countParams)
+      dbService.query(query, params),
+      dbService.query(countQuery, countParams)
     ]);
 
     res.json({
@@ -299,7 +298,7 @@ router.get('/:id', async (req, res) => {
       WHERE submission_id = $1
     `;
     
-    const result = await pool.query(query, [id]);
+    const result = await dbService.query(query, [id]);
     
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Form submission not found' });
@@ -330,7 +329,7 @@ router.patch('/:id/status', async (req, res) => {
       RETURNING *
     `;
     
-    const result = await pool.query(query, [status, id]);
+    const result = await dbService.query(query, [status, id]);
     
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Form submission not found' });
