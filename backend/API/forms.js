@@ -3,52 +3,64 @@ const router = express.Router();
 const { pool } = require('../server');
 const Joi = require('joi');
 
-// Validation schemas
-const studentSchema = Joi.object({
-  title: Joi.string().valid('Mr', 'Ms', 'Dr', 'Prof').required(),
-  fullName: Joi.string().min(2).max(100).required(),
-  email: Joi.string().email().required(),
-  course: Joi.string().required(),
-  batchInitials: Joi.string().required(),
-  startDate: Joi.date().required(),
-  endDate: Joi.date().greater(Joi.ref('startDate')).required(),
-  gpa: Joi.number().min(0).max(10).required(),
-  certificateType: Joi.string().valid('student').required()
-});
-
-const trainerSchema = Joi.object({
-  title: Joi.string().valid('Mr', 'Ms', 'Dr', 'Prof').required(),
-  fullName: Joi.string().min(2).max(100).required(),
-  email: Joi.string().email().required(),
-  employeeId: Joi.string().optional(),
-  qualification: Joi.string().required(),
-  specialization: Joi.string().required(),
-  course: Joi.string().required(),
-  batchInitials: Joi.string().required(),
-  trainingHours: Joi.number().min(1).required(),
-  trainingStartDate: Joi.date().required(),
-  trainingEndDate: Joi.date().greater(Joi.ref('trainingStartDate')).required(),
-  performanceRating: Joi.number().min(0).max(10).optional(),
-  certificateType: Joi.string().valid('trainer').required()
-});
-
-const traineeSchema = Joi.object({
-  title: Joi.string().valid('Mr', 'Ms', 'Dr', 'Prof').required(),
-  fullName: Joi.string().min(2).max(100).required(),
-  email: Joi.string().email().required(),
+// Flexible validation schema for form submissions
+const formSubmissionSchema = Joi.object({
+  // Basic required fields
+  full_name: Joi.string().min(2).max(255).required(),
+  email_address: Joi.string().email().required(),
+  
+  // Optional common fields
+  title: Joi.string().valid('Mr', 'Ms', 'Dr', 'Prof').optional(),
   phone: Joi.string().optional(),
-  organization: Joi.string().required(),
-  position: Joi.string().required(),
-  course: Joi.string().required(),
-  batchInitials: Joi.string().required(),
-  trainingType: Joi.string().valid('workshop', 'bootcamp', 'certification', 'seminar').required(),
-  trainingStartDate: Joi.date().required(),
-  trainingEndDate: Joi.date().greater(Joi.ref('trainingStartDate')).required(),
-  trainingDurationHours: Joi.number().min(1).required(),
-  attendancePercentage: Joi.number().min(0).max(100).optional(),
-  assessmentScore: Joi.number().min(0).max(100).optional(),
-  certificateType: Joi.string().valid('trainee').required()
-});
+  date_of_birth: Joi.date().optional(),
+  gender: Joi.string().optional(),
+  
+  // Address fields
+  address_line1: Joi.string().optional(),
+  address_line2: Joi.string().optional(),
+  city: Joi.string().optional(),
+  state: Joi.string().optional(),
+  country: Joi.string().optional(),
+  postal_code: Joi.string().optional(),
+  
+  // Educational/Professional
+  qualification: Joi.string().optional(),
+  institution: Joi.string().optional(),
+  specialization: Joi.string().optional(),
+  experience_years: Joi.number().optional(),
+  organization: Joi.string().optional(),
+  position: Joi.string().optional(),
+  employee_id: Joi.string().optional(),
+  
+  // Course information
+  course_name: Joi.string().optional(),
+  course_domain: Joi.string().optional(),
+  batch_initials: Joi.string().optional(),
+  batch_name: Joi.string().optional(),
+  training_type: Joi.string().optional(),
+  training_mode: Joi.string().optional(),
+  
+  // Dates
+  start_date: Joi.date().optional(),
+  end_date: Joi.date().optional(),
+  training_start_date: Joi.date().optional(),
+  training_end_date: Joi.date().optional(),
+  
+  // Performance metrics
+  attendance_percentage: Joi.number().min(0).max(100).optional(),
+  assessment_score: Joi.number().min(0).max(100).optional(),
+  gpa: Joi.number().min(0).max(10).optional(),
+  grade: Joi.string().optional(),
+  performance_rating: Joi.number().min(0).max(10).optional(),
+  training_hours: Joi.number().optional(),
+  training_duration_hours: Joi.number().optional(),
+  
+  // Certificate type
+  certificate_type: Joi.string().valid('student', 'trainer', 'trainee').default('student'),
+  
+  // Timestamp (for Google Forms)
+  timestamp: Joi.date().optional()
+}).unknown(true); // Allow additional fields
 
 // Handle form submissions from Google Forms
 router.post('/submit', async (req, res) => {
@@ -56,230 +68,284 @@ router.post('/submit', async (req, res) => {
     const formData = req.body;
     console.log('📝 Received form submission:', formData);
 
-    // Normalize form data (Google Forms might have different field names)
-    const normalizedData = normalizeFormData(formData);
+    // Normalize Google Forms data to database format
+    const normalizedData = normalizeGoogleFormData(formData);
     
-    // Validate based on certificate type
-    let validationResult;
-    switch (normalizedData.certificateType) {
-      case 'student':
-        validationResult = studentSchema.validate(normalizedData);
-        break;
-      case 'trainer':
-        validationResult = trainerSchema.validate(normalizedData);
-        break;
-      case 'trainee':
-        validationResult = traineeSchema.validate(normalizedData);
-        break;
-      default:
-        return res.status(400).json({ error: 'Invalid certificate type' });
-    }
-
-    if (validationResult.error) {
-      return res.status(400).json({ 
-        error: 'Validation failed', 
-        details: validationResult.error.details 
+    // Validate the normalized data
+    const { error, value } = formSubmissionSchema.validate(normalizedData);
+    
+    if (error) {
+      console.error('❌ Validation error:', error.details);
+      return res.status(400).json({
+        error: 'Validation failed',
+        details: error.details
       });
     }
 
     // Store in database
-    const certificateId = await storeCertificateData(normalizedData);
+    const submissionId = await insertFormSubmission(value);
+    
+    console.log('✅ Form submission stored with ID:', submissionId);
     
     res.json({
       success: true,
-      message: 'Certificate application submitted successfully',
-      certificateId: certificateId,
-      type: normalizedData.certificateType
+      message: 'Form submission received and stored successfully',
+      submissionId: submissionId,
+      status: 'pending_approval'
     });
 
   } catch (error) {
     console.error('❌ Error processing form submission:', error);
-    res.status(500).json({ 
-      error: 'Failed to process form submission',
-      message: error.message 
+    res.status(500).json({
+      error: 'Internal server error',
+      message: 'Failed to process form submission'
     });
   }
 });
 
-// Normalize Google Forms data to our schema
-function normalizeFormData(formData) {
-  // Map Google Forms field names to our database schema
-  const fieldMapping = {
-    'Full Name': 'fullName',
-    'Email Address': 'email',
-    'Email': 'email',
-    'Course': 'course',
-    'Domain': 'course',
-    'Course/Domain': 'course',
-    'Batch Initials': 'batchInitials',
-    'Start Date': 'startDate',
-    'End Date': 'endDate',
-    'GPA': 'gpa',
-    'Employee ID': 'employeeId',
-    'Qualification': 'qualification',
-    'Specialization': 'specialization',
-    'Training Hours': 'trainingHours',
-    'Training Start Date': 'trainingStartDate',
-    'Training End Date': 'trainingEndDate',
-    'Performance Rating': 'performanceRating',
-    'Phone': 'phone',
-    'Organization': 'organization',
-    'Position': 'position',
-    'Training Type': 'trainingType',
-    'Training Duration (Hours)': 'trainingDurationHours',
-    'Attendance Percentage': 'attendancePercentage',
-    'Assessment Score': 'assessmentScore'
+// Function to normalize Google Forms data
+function normalizeGoogleFormData(formData) {
+  // Google Forms often sends data with column headers or question text as keys
+  // This function maps various possible field names to our database schema
+  
+  const normalized = {
+    timestamp: formData.Timestamp || formData.timestamp || new Date(),
+    raw_form_data: formData, // Store original data
+    form_source: 'google_forms'
   };
 
-  const normalized = {};
-  
-  // Apply field mapping
-  for (const [googleField, dbField] of Object.entries(fieldMapping)) {
-    if (formData[googleField] !== undefined) {
-      normalized[dbField] = formData[googleField];
+  // Map common field variations
+  const fieldMappings = {
+    // Name fields
+    full_name: ['Name', 'Full Name', 'Student Name', 'Participant Name', 'full_name', 'fullName', 'name'],
+    
+    // Contact fields
+    email_address: ['Email', 'Email Address', 'E-mail', 'email', 'emailAddress', 'email_address'],
+    phone: ['Phone', 'Mobile', 'Contact Number', 'Phone Number', 'phone', 'mobile'],
+    
+    // Personal info
+    title: ['Title', 'Salutation', 'Mr/Ms', 'title'],
+    date_of_birth: ['Date of Birth', 'DOB', 'Birth Date', 'date_of_birth', 'dob'],
+    gender: ['Gender', 'Sex', 'gender'],
+    
+    // Address
+    address_line1: ['Address', 'Address Line 1', 'Street Address', 'address', 'address_line1'],
+    city: ['City', 'city'],
+    state: ['State', 'Province', 'state'],
+    country: ['Country', 'country'],
+    postal_code: ['Postal Code', 'ZIP', 'Pin Code', 'postal_code', 'zip'],
+    
+    // Education/Professional
+    qualification: ['Qualification', 'Education', 'Degree', 'qualification'],
+    institution: ['Institution', 'College', 'University', 'School', 'institution'],
+    organization: ['Organization', 'Company', 'Employer', 'organization'],
+    position: ['Position', 'Job Title', 'Designation', 'position'],
+    experience_years: ['Experience', 'Years of Experience', 'experience', 'experience_years'],
+    
+    // Course details
+    course_name: ['Course', 'Course Name', 'Training Program', 'Program', 'course', 'course_name'],
+    batch_initials: ['Batch', 'Batch Code', 'Batch Number', 'batch', 'batch_initials'],
+    training_type: ['Training Type', 'Course Type', 'Program Type', 'training_type'],
+    
+    // Performance
+    gpa: ['GPA', 'CGPA', 'Score', 'Grade Point', 'gpa'],
+    attendance_percentage: ['Attendance', 'Attendance %', 'Attendance Percentage', 'attendance'],
+    assessment_score: ['Assessment Score', 'Test Score', 'Final Score', 'assessment'],
+    
+    // Certificate type
+    certificate_type: ['Certificate Type', 'Type', 'Category', 'certificate_type']
+  };
+
+  // Apply field mappings
+  Object.keys(fieldMappings).forEach(dbField => {
+    const possibleKeys = fieldMappings[dbField];
+    for (const key of possibleKeys) {
+      if (formData[key] !== undefined && formData[key] !== '') {
+        normalized[dbField] = formData[key];
+        break;
+      }
     }
+  });
+
+  // Set defaults
+  if (!normalized.certificate_type) {
+    normalized.certificate_type = 'student';
   }
 
-  // Copy direct matches
-  const directFields = ['title', 'certificateType', 'timestamp', 'responseId'];
-  directFields.forEach(field => {
-    if (formData[field] !== undefined) {
-      normalized[field] = formData[field];
+  // Parse dates if they're strings
+  ['start_date', 'end_date', 'training_start_date', 'training_end_date', 'date_of_birth'].forEach(dateField => {
+    if (normalized[dateField] && typeof normalized[dateField] === 'string') {
+      const parsed = new Date(normalized[dateField]);
+      if (!isNaN(parsed.getTime())) {
+        normalized[dateField] = parsed;
+      }
+    }
+  });
+
+  // Parse numbers
+  ['gpa', 'attendance_percentage', 'assessment_score', 'performance_rating', 'training_hours', 'experience_years'].forEach(numField => {
+    if (normalized[numField] && typeof normalized[numField] === 'string') {
+      const parsed = parseFloat(normalized[numField]);
+      if (!isNaN(parsed)) {
+        normalized[numField] = parsed;
+      }
     }
   });
 
   return normalized;
 }
 
-// Store certificate data in appropriate table
-async function storeCertificateData(data) {
-  const connection = await pool.getConnection();
+// Function to insert form submission into database
+async function insertFormSubmission(data) {
+  const client = await pool.connect();
   
   try {
-    await connection.beginTransaction();
+    const fields = Object.keys(data).filter(key => data[key] !== undefined);
+    const values = fields.map(key => data[key]);
+    const placeholders = fields.map((_, index) => `$${index + 1}`);
+    
+    const query = `
+      INSERT INTO form_submissions (${fields.join(', ')})
+      VALUES (${placeholders.join(', ')})
+      RETURNING submission_id
+    `;
+    
+    const result = await client.query(query, values);
+    return result.rows[0].submission_id;
+    
+  } finally {
+    client.release();
+  }
+}
 
-    // Get course and batch IDs
-    const courseId = await getCourseId(connection, data.course);
-    const batchId = await getBatchId(connection, data.batchInitials, courseId);
-    const templateId = await getTemplateId(connection, data.course, data.batchInitials);
+// Get all form submissions (for admin)
+router.get('/', async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const status = req.query.status;
+    const certificateType = req.query.type;
+    const offset = (page - 1) * limit;
 
-    let query, values, tableName;
+    let whereClause = '';
+    let params = [];
+    let paramIndex = 1;
 
-    switch (data.certificateType) {
-      case 'student':
-        tableName = 'student_certificates';
-        query = `
-          INSERT INTO student_certificates 
-          (title, full_name, email, course_id, batch_id, duration_months, start_date, end_date, gpa, template_id, qr_code_data) 
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `;
-        values = [
-          data.title, data.fullName, data.email, courseId, batchId, 
-          4, data.startDate, data.endDate, data.gpa, templateId, 'PENDING_QR'
-        ];
-        break;
-
-      case 'trainer':
-        tableName = 'trainer_certificates';
-        query = `
-          INSERT INTO trainer_certificates 
-          (title, full_name, email, employee_id, qualification, specialization, course_id, batch_id, 
-           training_hours, training_start_date, training_end_date, performance_rating, template_id, qr_code_data) 
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `;
-        values = [
-          data.title, data.fullName, data.email, data.employeeId, data.qualification, 
-          data.specialization, courseId, batchId, data.trainingHours, data.trainingStartDate, 
-          data.trainingEndDate, data.performanceRating, templateId, 'PENDING_QR'
-        ];
-        break;
-
-      case 'trainee':
-        tableName = 'trainee_certificates';
-        query = `
-          INSERT INTO trainee_certificates 
-          (title, full_name, email, phone, organization, position, course_id, batch_id, 
-           training_duration_hours, training_start_date, training_end_date, attendance_percentage, 
-           assessment_score, training_type, template_id, qr_code_data) 
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `;
-        values = [
-          data.title, data.fullName, data.email, data.phone, data.organization, 
-          data.position, courseId, batchId, data.trainingDurationHours, data.trainingStartDate, 
-          data.trainingEndDate, data.attendancePercentage, data.assessmentScore, 
-          data.trainingType, templateId, 'PENDING_QR'
-        ];
-        break;
+    if (status) {
+      whereClause += ` WHERE status = $${paramIndex}`;
+      params.push(status);
+      paramIndex++;
     }
 
-    const [result] = await connection.execute(query, values);
-    
-    await connection.commit();
-    console.log(`✅ ${data.certificateType} certificate stored with ID: ${result.insertId}`);
-    
-    return result.insertId;
+    if (certificateType) {
+      whereClause += whereClause ? ` AND certificate_type = $${paramIndex}` : ` WHERE certificate_type = $${paramIndex}`;
+      params.push(certificateType);
+      paramIndex++;
+    }
+
+    const query = `
+      SELECT 
+        submission_id,
+        full_name,
+        email_address,
+        phone,
+        course_name,
+        batch_initials,
+        certificate_type,
+        status,
+        gpa,
+        attendance_percentage,
+        created_at,
+        updated_at
+      FROM form_submissions
+      ${whereClause}
+      ORDER BY created_at DESC
+      LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
+    `;
+
+    params.push(limit, offset);
+
+    const countQuery = `SELECT COUNT(*) as total FROM form_submissions ${whereClause}`;
+    const countParams = params.slice(0, -2); // Remove limit and offset
+
+    const [submissions, countResult] = await Promise.all([
+      pool.query(query, params),
+      pool.query(countQuery, countParams)
+    ]);
+
+    res.json({
+      submissions: submissions.rows,
+      pagination: {
+        page,
+        limit,
+        total: parseInt(countResult.rows[0].total),
+        pages: Math.ceil(countResult.rows[0].total / limit)
+      }
+    });
 
   } catch (error) {
-    await connection.rollback();
-    throw error;
-  } finally {
-    connection.release();
+    console.error('❌ Error fetching form submissions:', error);
+    res.status(500).json({ error: 'Failed to fetch form submissions' });
   }
-}
+});
 
-// Helper functions to get IDs
-async function getCourseId(connection, courseName) {
-  const [rows] = await connection.execute(
-    'SELECT course_id FROM courses WHERE course_name = ? OR course_code = ?',
-    [courseName, courseName]
-  );
-  
-  if (rows.length === 0) {
-    // Create course if not exists
-    const [result] = await connection.execute(
-      'INSERT INTO courses (course_name, course_code, duration_months, description) VALUES (?, ?, ?, ?)',
-      [courseName, courseName.replace(/\s+/g, '_').toUpperCase(), 4, 'Auto-created from form submission']
-    );
-    return result.insertId;
-  }
-  
-  return rows[0].course_id;
-}
-
-async function getBatchId(connection, batchInitials, courseId) {
-  const [rows] = await connection.execute(
-    'SELECT batch_id FROM batches WHERE batch_initials = ? AND course_id = ?',
-    [batchInitials, courseId]
-  );
-  
-  if (rows.length === 0) {
-    // Create batch if not exists
-    const currentDate = new Date();
-    const endDate = new Date(currentDate);
-    endDate.setMonth(endDate.getMonth() + 4); // 4 months duration
+// Get single form submission
+router.get('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
     
-    const [result] = await connection.execute(
-      'INSERT INTO batches (batch_name, batch_initials, start_date, end_date, course_id) VALUES (?, ?, ?, ?, ?)',
-      [`${batchInitials} Batch`, batchInitials, currentDate, endDate, courseId]
-    );
-    return result.insertId;
-  }
-  
-  return rows[0].batch_id;
-}
+    const query = `
+      SELECT * FROM form_submissions 
+      WHERE submission_id = $1
+    `;
+    
+    const result = await pool.query(query, [id]);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Form submission not found' });
+    }
 
-async function getTemplateId(connection, courseName, batchInitials) {
-  const [rows] = await connection.execute(
-    'SELECT template_id FROM certificate_templates WHERE course_domain LIKE ? OR graduation_batch = ?',
-    [`%${courseName}%`, batchInitials]
-  );
-  
-  if (rows.length > 0) {
-    return rows[0].template_id;
+    res.json(result.rows[0]);
+
+  } catch (error) {
+    console.error('❌ Error fetching form submission:', error);
+    res.status(500).json({ error: 'Failed to fetch form submission' });
   }
-  
-  // Return default template ID or create one
-  return 1; // Default template
-}
+});
+
+// Update form submission status
+router.patch('/:id/status', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+    
+    if (!['pending', 'approved', 'rejected', 'generated', 'issued'].includes(status)) {
+      return res.status(400).json({ error: 'Invalid status' });
+    }
+
+    const query = `
+      UPDATE form_submissions 
+      SET status = $1, updated_at = CURRENT_TIMESTAMP
+      WHERE submission_id = $2
+      RETURNING *
+    `;
+    
+    const result = await pool.query(query, [status, id]);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Form submission not found' });
+    }
+
+    res.json({
+      success: true,
+      message: 'Status updated successfully',
+      submission: result.rows[0]
+    });
+
+  } catch (error) {
+    console.error('❌ Error updating status:', error);
+    res.status(500).json({ error: 'Failed to update status' });
+  }
+});
 
 module.exports = router;

@@ -5,43 +5,31 @@ const { pool } = require('../server');
 // Admin dashboard overview
 router.get('/dashboard', async (req, res) => {
   try {
-    // Get certificate counts by type and status
-    const [certificateStats] = await pool.execute(`
+    // Get certificate counts by type and status from form_submissions
+    const [submissionStats] = await pool.execute(`
       SELECT 
-        'student' as type,
+        certificate_type as type,
         COUNT(*) as total,
         SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
         SUM(CASE WHEN status = 'generated' THEN 1 ELSE 0 END) as generated,
+        SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) as approved,
         SUM(CASE WHEN status = 'issued' THEN 1 ELSE 0 END) as issued,
-        SUM(CASE WHEN status = 'revoked' THEN 1 ELSE 0 END) as revoked
-      FROM student_certificates
-      UNION ALL
-      SELECT 
-        'trainer' as type,
-        COUNT(*) as total,
-        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
-        SUM(CASE WHEN status = 'generated' THEN 1 ELSE 0 END) as generated,
-        SUM(CASE WHEN status = 'issued' THEN 1 ELSE 0 END) as issued,
-        SUM(CASE WHEN status = 'revoked' THEN 1 ELSE 0 END) as revoked
-      FROM trainer_certificates
-      UNION ALL
-      SELECT 
-        'trainee' as type,
-        COUNT(*) as total,
-        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
-        SUM(CASE WHEN status = 'generated' THEN 1 ELSE 0 END) as generated,
-        SUM(CASE WHEN status = 'issued' THEN 1 ELSE 0 END) as issued,
-        SUM(CASE WHEN status = 'revoked' THEN 1 ELSE 0 END) as revoked
-      FROM trainee_certificates
+        SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected
+      FROM form_submissions
+      GROUP BY certificate_type
     `);
 
-    // Get recent certificate submissions
+    // Get recent form submissions
     const [recentSubmissions] = await pool.execute(`
-      (SELECT 'student' as type, certificate_id, full_name, email, created_at, status FROM student_certificates ORDER BY created_at DESC LIMIT 5)
-      UNION ALL
-      (SELECT 'trainer' as type, certificate_id, full_name, email, created_at, status FROM trainer_certificates ORDER BY created_at DESC LIMIT 5)
-      UNION ALL
-      (SELECT 'trainee' as type, certificate_id, full_name, email, created_at, status FROM trainee_certificates ORDER BY created_at DESC LIMIT 5)
+      SELECT 
+        submission_id,
+        certificate_type as type,
+        full_name,
+        email_address as email,
+        course_name,
+        status,
+        created_at
+      FROM form_submissions
       ORDER BY created_at DESC
       LIMIT 10
     `);
@@ -49,35 +37,47 @@ router.get('/dashboard', async (req, res) => {
     // Get course statistics
     const [courseStats] = await pool.execute(`
       SELECT 
-        c.course_name,
-        c.course_code,
-        COUNT(DISTINCT b.batch_id) as total_batches,
-        (
-          (SELECT COUNT(*) FROM student_certificates sc WHERE sc.course_id = c.course_id) +
-          (SELECT COUNT(*) FROM trainer_certificates tc WHERE tc.course_id = c.course_id) +
-          (SELECT COUNT(*) FROM trainee_certificates tr WHERE tr.course_id = c.course_id)
-        ) as total_certificates
-      FROM courses c
-      LEFT JOIN batches b ON c.course_id = b.course_id
-      GROUP BY c.course_id, c.course_name, c.course_code
-      ORDER BY total_certificates DESC
+        course_name,
+        certificate_type,
+        COUNT(*) as total_submissions,
+        SUM(CASE WHEN status = 'generated' THEN 1 ELSE 0 END) as generated_certificates,
+        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending_approvals
+      FROM form_submissions
+      WHERE course_name IS NOT NULL
+      GROUP BY course_name, certificate_type
+      ORDER BY total_submissions DESC
+      LIMIT 20
+    `);
+
+    // Get certificate generation statistics
+    const [generationStats] = await pool.execute(`
+      SELECT 
+        DATE(cg.generated_at) as date,
+        COUNT(*) as certificates_generated
+      FROM certificate_generations cg
+      WHERE cg.generated_at >= CURRENT_DATE - INTERVAL '30 days'
+      GROUP BY DATE(cg.generated_at)
+      ORDER BY date DESC
+      LIMIT 30
     `);
 
     // Calculate totals
-    const totals = certificateStats.reduce((acc, row) => {
+    const totals = submissionStats.reduce((acc, row) => {
       acc.total += row.total;
       acc.pending += row.pending;
       acc.generated += row.generated;
+      acc.approved += row.approved;
       acc.issued += row.issued;
-      acc.revoked += row.revoked;
+      acc.rejected += row.rejected;
       return acc;
-    }, { total: 0, pending: 0, generated: 0, issued: 0, revoked: 0 });
+    }, { total: 0, pending: 0, generated: 0, approved: 0, issued: 0, rejected: 0 });
 
     res.json({
       overview: totals,
-      certificatesByType: certificateStats,
+      submissionsByType: submissionStats,
       recentSubmissions,
       courseStatistics: courseStats,
+      generationStats,
       timestamp: new Date().toISOString()
     });
 
@@ -87,24 +87,148 @@ router.get('/dashboard', async (req, res) => {
   }
 });
 
+// Get all form submissions (for admin management)
+router.get('/submissions', async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 50;
+    const status = req.query.status;
+    const certificateType = req.query.type;
+    const search = req.query.search;
+    const offset = (page - 1) * limit;
+
+    let whereClause = '';
+    let params = [];
+    let paramIndex = 1;
+
+    if (status) {
+      whereClause += ` WHERE status = $${paramIndex}`;
+      params.push(status);
+      paramIndex++;
+    }
+
+    if (certificateType) {
+      whereClause += whereClause ? ` AND certificate_type = $${paramIndex}` : ` WHERE certificate_type = $${paramIndex}`;
+      params.push(certificateType);
+      paramIndex++;
+    }
+
+    if (search) {
+      const searchClause = ` ${whereClause ? 'AND' : 'WHERE'} (full_name ILIKE $${paramIndex} OR email_address ILIKE $${paramIndex} OR course_name ILIKE $${paramIndex})`;
+      whereClause += searchClause;
+      params.push(`%${search}%`);
+      paramIndex++;
+    }
+
+    const query = `
+      SELECT 
+        fs.submission_id,
+        fs.full_name,
+        fs.email_address,
+        fs.phone,
+        fs.course_name,
+        fs.batch_initials,
+        fs.certificate_type,
+        fs.status,
+        fs.gpa,
+        fs.attendance_percentage,
+        fs.qualification,
+        fs.organization,
+        fs.created_at,
+        fs.updated_at,
+        cg.certificate_ref_no,
+        cg.generated_at as certificate_generated_at
+      FROM form_submissions fs
+      LEFT JOIN certificate_generations cg ON fs.submission_id = cg.submission_id
+      ${whereClause}
+      ORDER BY fs.created_at DESC
+      LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
+    `;
+
+    params.push(limit, offset);
+
+    const countQuery = `SELECT COUNT(*) as total FROM form_submissions fs ${whereClause}`;
+    const countParams = params.slice(0, -2); // Remove limit and offset
+
+    const [submissions, countResult] = await Promise.all([
+      pool.query(query, params),
+      pool.query(countQuery, countParams)
+    ]);
+
+    res.json({
+      submissions: submissions.rows,
+      pagination: {
+        page,
+        limit,
+        total: parseInt(countResult.rows[0].total),
+        pages: Math.ceil(countResult.rows[0].total / limit)
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Error fetching submissions:', error);
+    res.status(500).json({ error: 'Failed to fetch submissions' });
+  }
+});
+
+// Approve/reject form submission
+router.patch('/submissions/:id/status', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, notes } = req.body;
+    
+    if (!['pending', 'approved', 'rejected', 'generated', 'issued'].includes(status)) {
+      return res.status(400).json({ error: 'Invalid status' });
+    }
+
+    const query = `
+      UPDATE form_submissions 
+      SET status = $1, updated_at = CURRENT_TIMESTAMP
+      WHERE submission_id = $2
+      RETURNING *
+    `;
+    
+    const result = await pool.query(query, [status, id]);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Form submission not found' });
+    }
+
+    // Log the status change
+    console.log(`📝 Status updated for submission ${id}: ${result.rows[0].status} -> ${status}`);
+
+    res.json({
+      success: true,
+      message: 'Status updated successfully',
+      submission: result.rows[0]
+    });
+
+  } catch (error) {
+    console.error('❌ Error updating status:', error);
+    res.status(500).json({ error: 'Failed to update status' });
+  }
+});
+
 // Get all courses
 router.get('/courses', async (req, res) => {
   try {
     const [courses] = await pool.execute(`
-      SELECT c.*, 
+      SELECT 
+        c.*,
         COUNT(DISTINCT b.batch_id) as total_batches,
         (
-          (SELECT COUNT(*) FROM student_certificates sc WHERE sc.course_id = c.course_id) +
-          (SELECT COUNT(*) FROM trainer_certificates tc WHERE tc.course_id = c.course_id) +
-          (SELECT COUNT(*) FROM trainee_certificates tr WHERE tr.course_id = c.course_id)
-        ) as total_certificates
+          SELECT COUNT(*) 
+          FROM form_submissions fs 
+          WHERE fs.course_name = c.course_name
+        ) as total_submissions
       FROM courses c
       LEFT JOIN batches b ON c.course_id = b.course_id
-      GROUP BY c.course_id
+      GROUP BY c.course_id, c.course_name, c.course_code, c.description, c.duration_hours, c.created_at, c.updated_at
       ORDER BY c.course_name
     `);
 
     res.json(courses);
+
   } catch (error) {
     console.error('❌ Error fetching courses:', error);
     res.status(500).json({ error: 'Failed to fetch courses' });
@@ -115,18 +239,21 @@ router.get('/courses', async (req, res) => {
 router.get('/batches', async (req, res) => {
   try {
     const [batches] = await pool.execute(`
-      SELECT b.*, c.course_name,
+      SELECT 
+        b.*,
+        c.course_name,
         (
-          (SELECT COUNT(*) FROM student_certificates sc WHERE sc.batch_id = b.batch_id) +
-          (SELECT COUNT(*) FROM trainer_certificates tc WHERE tc.batch_id = b.batch_id) +
-          (SELECT COUNT(*) FROM trainee_certificates tr WHERE tr.batch_id = b.batch_id)
-        ) as total_certificates
+          SELECT COUNT(*) 
+          FROM form_submissions fs 
+          WHERE fs.batch_initials = b.batch_initials
+        ) as total_submissions
       FROM batches b
-      JOIN courses c ON b.course_id = c.course_id
+      LEFT JOIN courses c ON b.course_id = c.course_id
       ORDER BY b.start_date DESC
     `);
 
     res.json(batches);
+
   } catch (error) {
     console.error('❌ Error fetching batches:', error);
     res.status(500).json({ error: 'Failed to fetch batches' });
@@ -137,17 +264,19 @@ router.get('/batches', async (req, res) => {
 router.get('/templates', async (req, res) => {
   try {
     const [templates] = await pool.execute(`
-      SELECT ct.*,
+      SELECT 
+        t.*,
         (
-          (SELECT COUNT(*) FROM student_certificates sc WHERE sc.template_id = ct.template_id) +
-          (SELECT COUNT(*) FROM trainer_certificates tc WHERE tc.template_id = ct.template_id) +
-          (SELECT COUNT(*) FROM trainee_certificates tr WHERE tr.template_id = ct.template_id)
+          SELECT COUNT(*) 
+          FROM certificate_generations cg 
+          WHERE cg.template_id = t.template_id
         ) as usage_count
-      FROM certificate_templates ct
-      ORDER BY ct.graduation_batch, ct.course_domain
+      FROM certificate_templates t
+      ORDER BY t.template_type, t.template_name
     `);
 
     res.json(templates);
+
   } catch (error) {
     console.error('❌ Error fetching templates:', error);
     res.status(500).json({ error: 'Failed to fetch templates' });
@@ -157,26 +286,29 @@ router.get('/templates', async (req, res) => {
 // Add new course
 router.post('/courses', async (req, res) => {
   try {
-    const { course_name, course_code, duration_months, description } = req.body;
-
-    if (!course_name || !course_code || !duration_months) {
-      return res.status(400).json({ error: 'Missing required fields' });
+    const { course_name, course_code, description, duration_hours } = req.body;
+    
+    if (!course_name) {
+      return res.status(400).json({ error: 'Course name is required' });
     }
 
-    const [result] = await pool.execute(
-      'INSERT INTO courses (course_name, course_code, duration_months, description) VALUES (?, ?, ?, ?)',
-      [course_name, course_code, duration_months, description]
-    );
-
+    const query = `
+      INSERT INTO courses (course_name, course_code, description, duration_hours)
+      VALUES ($1, $2, $3, $4)
+      RETURNING *
+    `;
+    
+    const result = await pool.query(query, [course_name, course_code, description, duration_hours]);
+    
     res.json({
       success: true,
       message: 'Course added successfully',
-      courseId: result.insertId
+      course: result.rows[0]
     });
 
   } catch (error) {
     console.error('❌ Error adding course:', error);
-    if (error.code === 'ER_DUP_ENTRY') {
+    if (error.code === '23505') { // Unique violation
       res.status(400).json({ error: 'Course code already exists' });
     } else {
       res.status(500).json({ error: 'Failed to add course' });
@@ -187,21 +319,24 @@ router.post('/courses', async (req, res) => {
 // Add new batch
 router.post('/batches', async (req, res) => {
   try {
-    const { batch_name, batch_initials, start_date, end_date, course_id } = req.body;
-
-    if (!batch_name || !batch_initials || !start_date || !end_date || !course_id) {
-      return res.status(400).json({ error: 'Missing required fields' });
+    const { batch_name, batch_initials, course_id, start_date, end_date } = req.body;
+    
+    if (!batch_name || !course_id) {
+      return res.status(400).json({ error: 'Batch name and course ID are required' });
     }
 
-    const [result] = await pool.execute(
-      'INSERT INTO batches (batch_name, batch_initials, start_date, end_date, course_id) VALUES (?, ?, ?, ?, ?)',
-      [batch_name, batch_initials, start_date, end_date, course_id]
-    );
-
+    const query = `
+      INSERT INTO batches (batch_name, batch_initials, course_id, start_date, end_date)
+      VALUES ($1, $2, $3, $4, $5)
+      RETURNING *
+    `;
+    
+    const result = await pool.query(query, [batch_name, batch_initials, course_id, start_date, end_date]);
+    
     res.json({
       success: true,
       message: 'Batch added successfully',
-      batchId: result.insertId
+      batch: result.rows[0]
     });
 
   } catch (error) {
@@ -213,21 +348,24 @@ router.post('/batches', async (req, res) => {
 // Add new template
 router.post('/templates', async (req, res) => {
   try {
-    const { template_name, template_file_path, course_domain, graduation_batch } = req.body;
-
-    if (!template_name || !template_file_path || !course_domain || !graduation_batch) {
-      return res.status(400).json({ error: 'Missing required fields' });
+    const { template_name, template_path, template_type } = req.body;
+    
+    if (!template_name || !template_type) {
+      return res.status(400).json({ error: 'Template name and type are required' });
     }
 
-    const [result] = await pool.execute(
-      'INSERT INTO certificate_templates (template_name, template_file_path, course_domain, graduation_batch) VALUES (?, ?, ?, ?)',
-      [template_name, template_file_path, course_domain, graduation_batch]
-    );
-
+    const query = `
+      INSERT INTO certificate_templates (template_name, template_path, template_type)
+      VALUES ($1, $2, $3)
+      RETURNING *
+    `;
+    
+    const result = await pool.query(query, [template_name, template_path, template_type]);
+    
     res.json({
       success: true,
       message: 'Template added successfully',
-      templateId: result.insertId
+      template: result.rows[0]
     });
 
   } catch (error) {
@@ -236,123 +374,85 @@ router.post('/templates', async (req, res) => {
   }
 });
 
-// Update course
-router.put('/courses/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { course_name, course_code, duration_months, description } = req.body;
-
-    const [result] = await pool.execute(
-      'UPDATE courses SET course_name = ?, course_code = ?, duration_months = ?, description = ? WHERE course_id = ?',
-      [course_name, course_code, duration_months, description, id]
-    );
-
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ error: 'Course not found' });
-    }
-
-    res.json({
-      success: true,
-      message: 'Course updated successfully'
-    });
-
-  } catch (error) {
-    console.error('❌ Error updating course:', error);
-    res.status(500).json({ error: 'Failed to update course' });
-  }
-});
-
-// Delete course (only if no certificates exist)
-router.delete('/courses/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    // Check if course has certificates
-    const [certCheck] = await pool.execute(`
-      SELECT 
-        (SELECT COUNT(*) FROM student_certificates WHERE course_id = ?) +
-        (SELECT COUNT(*) FROM trainer_certificates WHERE course_id = ?) +
-        (SELECT COUNT(*) FROM trainee_certificates WHERE course_id = ?) as total
-    `, [id, id, id]);
-
-    if (certCheck[0].total > 0) {
-      return res.status(400).json({ 
-        error: 'Cannot delete course with existing certificates',
-        certificateCount: certCheck[0].total
-      });
-    }
-
-    const [result] = await pool.execute('DELETE FROM courses WHERE course_id = ?', [id]);
-
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ error: 'Course not found' });
-    }
-
-    res.json({
-      success: true,
-      message: 'Course deleted successfully'
-    });
-
-  } catch (error) {
-    console.error('❌ Error deleting course:', error);
-    res.status(500).json({ error: 'Failed to delete course' });
-  }
-});
-
-// Export data
+// Export submissions data
 router.get('/export/:type', async (req, res) => {
   try {
     const { type } = req.params;
+    const format = req.query.format || 'json';
     
-    let query;
+    let query = '';
+    
     switch (type) {
-      case 'student':
+      case 'submissions':
         query = `
-          SELECT sc.*, c.course_name, b.batch_name, ct.template_name
-          FROM student_certificates sc
-          JOIN courses c ON sc.course_id = c.course_id
-          JOIN batches b ON sc.batch_id = b.batch_id
-          JOIN certificate_templates ct ON sc.template_id = ct.template_id
-          ORDER BY sc.created_at DESC
+          SELECT 
+            fs.*,
+            cg.certificate_ref_no,
+            cg.generated_at as certificate_generated_at
+          FROM form_submissions fs
+          LEFT JOIN certificate_generations cg ON fs.submission_id = cg.submission_id
+          ORDER BY fs.created_at DESC
         `;
         break;
-      case 'trainer':
+      case 'certificates':
         query = `
-          SELECT tc.*, c.course_name, b.batch_name, ct.template_name
-          FROM trainer_certificates tc
-          JOIN courses c ON tc.course_id = c.course_id
-          JOIN batches b ON tc.batch_id = b.batch_id
-          JOIN certificate_templates ct ON tc.template_id = ct.template_id
-          ORDER BY tc.created_at DESC
-        `;
-        break;
-      case 'trainee':
-        query = `
-          SELECT tc.*, c.course_name, b.batch_name, ct.template_name
-          FROM trainee_certificates tc
-          JOIN courses c ON tc.course_id = c.course_id
-          JOIN batches b ON tc.batch_id = b.batch_id
-          JOIN certificate_templates ct ON tc.template_id = ct.template_id
-          ORDER BY tc.created_at DESC
+          SELECT 
+            cg.*,
+            fs.full_name,
+            fs.email_address,
+            fs.course_name,
+            fs.certificate_type
+          FROM certificate_generations cg
+          JOIN form_submissions fs ON cg.submission_id = fs.submission_id
+          ORDER BY cg.generated_at DESC
         `;
         break;
       default:
         return res.status(400).json({ error: 'Invalid export type' });
     }
-
-    const [data] = await pool.execute(query);
-
-    res.json({
-      type,
-      data,
-      count: data.length,
-      exportedAt: new Date().toISOString()
-    });
+    
+    const result = await pool.query(query);
+    
+    if (format === 'csv') {
+      // Convert to CSV
+      const csv = convertToCSV(result.rows);
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="${type}_export.csv"`);
+      res.send(csv);
+    } else {
+      res.json({
+        type: type,
+        count: result.rows.length,
+        data: result.rows,
+        exported_at: new Date().toISOString()
+      });
+    }
 
   } catch (error) {
     console.error('❌ Error exporting data:', error);
     res.status(500).json({ error: 'Failed to export data' });
   }
 });
+
+// Helper function to convert JSON to CSV
+function convertToCSV(data) {
+  if (data.length === 0) return '';
+  
+  const headers = Object.keys(data[0]);
+  const csvHeaders = headers.join(',');
+  
+  const csvRows = data.map(row => {
+    return headers.map(header => {
+      const value = row[header];
+      if (value === null || value === undefined) return '';
+      if (typeof value === 'string' && value.includes(',')) {
+        return `"${value.replace(/"/g, '""')}"`;
+      }
+      return value;
+    }).join(',');
+  });
+  
+  return [csvHeaders, ...csvRows].join('\n');
+}
 
 module.exports = router;
