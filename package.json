@@ -1,0 +1,27 @@
+{
+  "name": "certificate-automation",
+  "version": "1.0.0",
+  "description": "Certificate Automation System - Combined Deployment",
+  "scripts": {
+    "build": "cd Frontend/React && npm install && npm run build",
+    "start": "cd Backend && npm start",
+    "dev": "npm run dev:backend & npm run dev:frontend",
+    "dev:backend": "cd Backend && npm run dev",
+    "dev:frontend": "cd Frontend/React && npm start",
+    "install:all": "cd Backend && npm install && cd ../Frontend/React && npm install",
+    "postinstall": "npm run build"
+  },
+  "engines": {
+    "node": ">=16.0.0",
+    "npm": ">=8.0.0"
+  },
+  "keywords": [
+    "certificate",
+    "automation",
+    "nodejs",
+    "react",
+    "fullstack"
+  ],
+  "author": "SURE Trust",
+  "license": "MIT"
+}

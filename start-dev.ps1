@@ -14,7 +14,7 @@ Write-Host ""
 
 # Install backend dependencies
 Write-Host "🔧 Installing backend dependencies..." -ForegroundColor Yellow
-Set-Location backend
+Set-Location Backend
 try {
     npm install
     if ($LASTEXITCODE -ne 0) { throw "npm install failed" }
@@ -40,7 +40,7 @@ Write-Host ""
 
 # Install frontend dependencies
 Write-Host "🎨 Installing frontend dependencies..." -ForegroundColor Yellow
-Set-Location ..\frontend
+Set-Location ..\Frontend\React
 try {
     npm install
     if ($LASTEXITCODE -ne 0) { throw "npm install failed" }
@@ -60,18 +60,18 @@ Write-Host "🎨 Frontend will run on: http://localhost:3001" -ForegroundColor B
 Write-Host ""
 
 # Go back to root directory
-Set-Location ..
+Set-Location ..\..
 
 # Start backend server in new terminal
 Write-Host "Starting backend server..." -ForegroundColor Yellow
-Start-Process PowerShell -ArgumentList "-NoExit", "-Command", "cd backend; npm run dev"
+Start-Process PowerShell -ArgumentList "-NoExit", "-Command", "cd Backend; npm run dev"
 
 # Wait for backend to start
 Start-Sleep -Seconds 5
 
 # Start frontend server in new terminal
 Write-Host "Starting frontend server..." -ForegroundColor Yellow
-Start-Process PowerShell -ArgumentList "-NoExit", "-Command", "cd frontend; npm start"
+Start-Process PowerShell -ArgumentList "-NoExit", "-Command", "cd Frontend\React; npm start"
 
 Write-Host ""
 Write-Host "✅ Development servers started!" -ForegroundColor Green
