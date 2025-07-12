@@ -66,3 +66,12 @@ confidential-templates/
 # Temporary files
 tmp/
 temp/
+
+# Google Service Account Credentials
+Google/Sheet/Sheet-API.JSON
+**/google-credentials.json
+**/service-account.json
+
+# Certificate Templates (Confidential)
+Certificate_Templates/
+confidential-templates/
