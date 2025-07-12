@@ -174,11 +174,11 @@
                 <option value="revoked">Revoked</option>
             </select>
             
-            <button onclick="loadCertificates()">🔄 Refresh</button>
-            <button onclick="forceRefresh()" style="background: #dc3545; color: white;">🔄 Force Refresh</button>
-            <button onclick="generateAllPending()" class="generate">⚡ Generate All Pending</button>
-            <button onclick="syncGoogleForms()" style="background: #17a2b8; color: white;">📥 Sync Google Forms</button>
-            <button onclick="testAPI()" style="background: #ffc107; color: #000;">🔧 Test API</button>
+            <button id="refreshBtn">🔄 Refresh</button>
+            <button id="forceRefreshBtn" style="background: #dc3545; color: white;">🔄 Force Refresh</button>
+            <button id="generateAllBtn" class="generate">⚡ Generate All Pending</button>
+            <button id="syncFormsBtn" style="background: #17a2b8; color: white;">📥 Sync Google Forms</button>
+            <button id="testAPIBtn" style="background: #ffc107; color: #000;">🔧 Test API</button>
         </div>
         
         <div id="message"></div>
@@ -210,13 +210,28 @@
         
         console.log('Using API base:', API_BASE);
         
-        // Load dashboard on page load
-        window.onload = function() {
+        // Load dashboard on page load using proper event listener (CSP compliant)
+        document.addEventListener('DOMContentLoaded', function() {
             console.log('🚀 Dashboard loading...');
             updateTimestamp();
             loadStats();
             loadCertificates();
-        };
+            
+            // Add event listeners for buttons
+            setupEventListeners();
+        });
+        
+        // Setup event listeners (fixes CSP inline handler issues)
+        function setupEventListeners() {
+            document.getElementById('refreshBtn').addEventListener('click', loadCertificates);
+            document.getElementById('forceRefreshBtn').addEventListener('click', forceRefresh);
+            document.getElementById('generateAllBtn').addEventListener('click', generateAllPending);
+            document.getElementById('syncFormsBtn').addEventListener('click', syncGoogleForms);
+            document.getElementById('testAPIBtn').addEventListener('click', testAPI);
+            
+            // Status filter change listener
+            document.getElementById('statusFilter').addEventListener('change', loadCertificates);
+        }
         
         // Update timestamp
         function updateTimestamp() {
@@ -381,14 +396,14 @@
                                         <td>${cert.certificate_ref_no || cert.reference_number || 'Not generated'}</td>
                                         <td>
                                             ${cert.status === 'pending' ? 
-                                                `<button class="generate" onclick="generateCertificate('${cert.id}')">Generate</button>` :
+                                                `<button class="generate" data-cert-id="${cert.id}">Generate</button>` :
                                                 cert.verification_url ? 
                                                     `<div>
                                                         <a href="${cert.verification_url}" target="_blank" style="color: #28a745; text-decoration: none;">View Certificate</a><br>
                                                         ${cert.certificate_ref_no ? 
                                                             `<div style="margin-top: 5px;">
-                                                                <a href="/certificates/img/${cert.certificate_ref_no}.png" target="_blank" style="color: #007bff; font-size: 0.8em; margin-right: 8px;" onclick="event.stopPropagation()">IMG</a>
-                                                                <a href="/certificates/pdf/${cert.certificate_ref_no}.pdf" target="_blank" style="color: #dc3545; font-size: 0.8em;" onclick="event.stopPropagation()">PDF</a>
+                                                                <a href="/certificates/img/${cert.certificate_ref_no}.png" target="_blank" style="color: #007bff; font-size: 0.8em; margin-right: 8px;" class="cert-file-link">IMG</a>
+                                                                <a href="/certificates/pdf/${cert.certificate_ref_no}.pdf" target="_blank" style="color: #dc3545; font-size: 0.8em;" class="cert-file-link">PDF</a>
                                                             </div>` : ''
                                                         }
                                                         <small style="color: #666;">Ref: ${cert.certificate_ref_no || 'N/A'}</small>
@@ -430,6 +445,32 @@
                         4. Check if CORS is properly configured
                     </div>
                 `;
+            }
+            
+            // Setup event delegation for dynamically generated buttons
+            setupCertificateEventListeners();
+        }
+        
+        // Setup event listeners for dynamically generated certificate buttons
+        function setupCertificateEventListeners() {
+            // Use event delegation for generate buttons
+            document.removeEventListener('click', handleCertificateActions); // Remove existing listener
+            document.addEventListener('click', handleCertificateActions);
+        }
+        
+        // Handle clicks on dynamically generated certificate action buttons
+        function handleCertificateActions(event) {
+            // Handle generate certificate buttons
+            if (event.target.classList.contains('generate') && event.target.dataset.certId) {
+                event.preventDefault();
+                event.stopPropagation();
+                generateCertificate(event.target.dataset.certId);
+            }
+            
+            // Handle certificate file links (prevent propagation)
+            if (event.target.classList.contains('cert-file-link')) {
+                event.stopPropagation();
+                // Let the link work normally
             }
         }
         
