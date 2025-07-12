@@ -220,7 +220,9 @@
                 console.log('Stats response status:', response.status);
                 
                 if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    // If admin endpoint doesn't exist, calculate stats from certificates
+                    console.log('Admin endpoint not available, calculating from certificates...');
+                    return loadStatsFromCertificates();
                 }
                 
                 const data = await response.json();
@@ -229,7 +231,7 @@
                 const statsContainer = document.getElementById('stats');
                 
                 // Handle different response structures
-                const totalSummary = data.overview || {
+                const totalSummary = data.overview || data.summary || {
                     pending: 0,
                     generated: 0,
                     issued: 0,
@@ -241,7 +243,7 @@
                 statsContainer.innerHTML = `
                     <div class="stat-card">
                         <div class="stat-number">${totalSummary.pending || 0}</div>
-                        <div>Pending Approval</div>
+                        <div>Pending</div>
                     </div>
                     <div class="stat-card">
                         <div class="stat-number">${totalSummary.generated || 0}</div>
@@ -253,20 +255,61 @@
                     </div>
                     <div class="stat-card">
                         <div class="stat-number">${totalSummary.total || 0}</div>
-                        <div>Total Certificates</div>
+                        <div>Total</div>
                     </div>
                 `;
             } catch (error) {
                 console.error('Error loading stats:', error);
+                // Fallback to calculating from certificates
+                loadStatsFromCertificates();
+            }
+        }
+        
+        // Fallback: Calculate stats from certificates list
+        async function loadStatsFromCertificates() {
+            try {
+                const response = await fetch(`${API_BASE}/certificates?limit=1000`);
+                if (!response.ok) throw new Error('Failed to load certificates');
+                
+                const data = await response.json();
+                const certificates = data.certificates || [];
+                
+                const stats = {
+                    pending: certificates.filter(c => c.status === 'pending').length,
+                    generated: certificates.filter(c => c.status === 'generated').length,
+                    issued: certificates.filter(c => c.status === 'issued').length,
+                    total: certificates.length
+                };
+                
+                const statsContainer = document.getElementById('stats');
+                statsContainer.innerHTML = `
+                    <div class="stat-card">
+                        <div class="stat-number">${stats.pending}</div>
+                        <div>Pending</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number">${stats.generated}</div>
+                        <div>Generated</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number">${stats.issued}</div>
+                        <div>Issued</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number">${stats.total}</div>
+                        <div>Total</div>
+                    </div>
+                `;
+            } catch (error) {
+                console.error('Error calculating stats from certificates:', error);
                 const statsContainer = document.getElementById('stats');
                 statsContainer.innerHTML = `
                     <div class="stat-card" style="background: #dc3545;">
                         <div class="stat-number">!</div>
                         <div>Error Loading Stats</div>
-                        <small>${error.message}</small>
+                        <small>Check console for details</small>
                     </div>
                 `;
-                showMessage('Failed to load dashboard statistics: ' + error.message, 'error');
             }
         }
         
@@ -311,16 +354,18 @@
                             <tbody>
                                 ${data.certificates.map(cert => `
                                     <tr>
-                                        <td>${cert.certificate_type || cert.cert_type || 'N/A'}</td>
+                                        <td>${cert.certificate_type || cert.cert_type || 'Student'}</td>
                                         <td>${cert.full_name || cert.name || 'N/A'}</td>
                                         <td>${cert.email || 'N/A'}</td>
-                                        <td>${cert.course_name || cert.course_domain || cert.domain || 'N/A'}</td>
+                                        <td>${cert.course_name || cert.course_domain || cert.domain || 'N/A'} ${cert.batch_initials ? `(${cert.batch_initials})` : ''}</td>
                                         <td><span class="status ${cert.status || 'unknown'}">${cert.status || 'unknown'}</span></td>
                                         <td>${cert.certificate_ref_no || cert.reference_number || 'Not generated'}</td>
                                         <td>
                                             ${cert.status === 'pending' ? 
-                                                `<button class="generate" onclick="generateCertificate('${cert.certificate_type || cert.cert_type}', '${cert.id || cert.certificate_id}')">Generate</button>` :
-                                                `<span style="color: #28a745;">✓ ${cert.status}</span>`
+                                                `<button class="generate" onclick="generateCertificate('${cert.id}')">Generate</button>` :
+                                                cert.verification_url ? 
+                                                    `<a href="${cert.verification_url}" target="_blank" style="color: #28a745; text-decoration: none;">View Certificate</a>` :
+                                                    `<span style="color: #28a745;">✓ ${cert.status}</span>`
                                             }
                                         </td>
                                     </tr>
@@ -361,22 +406,22 @@
         }
         
         // Generate single certificate
-        async function generateCertificate(type, id) {
+        async function generateCertificate(id) {
             try {
                 showMessage('Generating certificate...', 'loading');
                 
-                const response = await fetch(`${API_BASE}/certificates/generate/${type}/${id}`, {
+                const response = await fetch(`${API_BASE}/certificates/generate/${id}`, {
                     method: 'POST'
                 });
                 
                 const data = await response.json();
                 
                 if (response.ok) {
-                    showMessage(`Certificate generated successfully! Reference: ${data.referenceNumber}`, 'success');
+                    showMessage(`Certificate generated successfully! Reference: ${data.certificate_ref_no || data.referenceNumber}`, 'success');
                     loadCertificates();
                     loadStats();
                 } else {
-                    showMessage('Error: ' + data.error, 'error');
+                    showMessage('Error: ' + (data.error || data.message), 'error');
                 }
             } catch (error) {
                 showMessage('Error generating certificate: ' + error.message, 'error');
@@ -390,39 +435,25 @@
             }
             
             try {
-                showMessage('Loading pending certificates...', 'loading');
+                showMessage('Generating all pending certificates...', 'loading');
                 
-                // Get all pending certificates
-                const response = await fetch(`${API_BASE}/certificates?status=pending&limit=1000`);
+                // Use the batch generation endpoint
+                const response = await fetch(`${API_BASE}/certificates/generate-batch`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ status: 'pending' })
+                });
+                
                 const data = await response.json();
                 
-                if (data.certificates && data.certificates.length > 0) {
-                    showMessage(`Generating ${data.certificates.length} certificates...`, 'loading');
-                    
-                    let generated = 0;
-                    let failed = 0;
-                    
-                    for (const cert of data.certificates) {
-                        try {
-                            const genResponse = await fetch(`${API_BASE}/certificates/generate/${cert.certificate_type}/${cert.id}`, {
-                                method: 'POST'
-                            });
-                            
-                            if (genResponse.ok) {
-                                generated++;
-                            } else {
-                                failed++;
-                            }
-                        } catch (error) {
-                            failed++;
-                        }
-                    }
-                    
-                    showMessage(`Batch generation complete! Generated: ${generated}, Failed: ${failed}`, 'success');
+                if (response.ok) {
+                    showMessage(`Batch generation complete! Generated: ${data.generated || 0}, Failed: ${data.failed || 0}`, 'success');
                     loadCertificates();
                     loadStats();
                 } else {
-                    showMessage('No pending certificates found', 'error');
+                    showMessage('Error in batch generation: ' + (data.error || data.message), 'error');
                 }
             } catch (error) {
                 showMessage('Error in batch generation: ' + error.message, 'error');
