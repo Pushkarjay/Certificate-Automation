@@ -124,14 +124,23 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Serve verification page at /verify/:refNo
+// Serve verification page at /verify/:refNo (React app)
 app.get('/verify/:refNo?', (req, res) => {
-  res.sendFile(path.join(__dirname, '../Frontend/static/index.html'));
+  res.sendFile(path.join(__dirname, '../Frontend/React/build/index.html'));
 });
 
-// Serve verification page at root
+// Serve React app at root
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, '../Frontend/static/index.html'));
+  res.sendFile(path.join(__dirname, '../Frontend/React/build/index.html'));
+});
+
+// Handle React Router - serve React app for any non-API routes
+app.get('*', (req, res) => {
+  // Don't serve React for API routes or admin routes
+  if (req.path.startsWith('/api') || req.path.startsWith('/admin')) {
+    return res.status(404).json({ error: 'Not found' });
+  }
+  res.sendFile(path.join(__dirname, '../Frontend/React/build/index.html'));
 });
 
 // Error handling middleware

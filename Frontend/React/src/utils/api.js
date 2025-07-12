@@ -42,21 +42,21 @@ api.interceptors.response.use(
 export const certificateAPI = {
   // Verify certificate by reference number
   verify: async (refNo) => {
-    const response = await api.get(`/verify/${refNo}`);
+    const response = await api.get(`/certificates/verify/${refNo}`);
     return response.data;
   },
 
   // Search certificates
   search: async (query) => {
-    const response = await api.get('/verify/search', {
-      params: { q: query }
+    const response = await api.get('/certificates', {
+      params: { search: query }
     });
     return response.data;
   },
 
   // Get verification statistics
   getStats: async () => {
-    const response = await api.get('/verify/stats/overview');
+    const response = await api.get('/admin/dashboard');
     return response.data;
   },
 
