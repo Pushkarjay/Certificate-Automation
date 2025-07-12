@@ -1,6 +1,11 @@
 import axios from 'axios';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000/api';
+// For combined deployment, API is served from the same domain
+const API_BASE_URL = process.env.REACT_APP_API_URL || (
+  window.location.hostname === 'localhost' 
+    ? 'http://localhost:3000/api' 
+    : `${window.location.origin}/api`
+);
 
 const api = axios.create({
   baseURL: API_BASE_URL,
