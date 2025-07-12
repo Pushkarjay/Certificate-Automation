@@ -3,9 +3,30 @@ const mysql = require('mysql2/promise');
 
 class DatabaseService {
   constructor() {
-    this.dbType = process.env.DB_TYPE || 'mysql';
+    // Auto-detect database type from DATABASE_URL or environment
+    this.dbType = this.detectDatabaseType();
     this.pool = null;
     this.init();
+  }
+
+  detectDatabaseType() {
+    // If DATABASE_URL is set and contains postgres, use PostgreSQL
+    if (process.env.DATABASE_URL && process.env.DATABASE_URL.includes('postgres')) {
+      return 'postgresql';
+    }
+    
+    // If DB_TYPE is explicitly set, use that
+    if (process.env.DB_TYPE) {
+      return process.env.DB_TYPE;
+    }
+    
+    // If we have PostgreSQL connection details, use PostgreSQL
+    if (process.env.DB_HOST && process.env.DB_HOST.includes('postgres')) {
+      return 'postgresql';
+    }
+    
+    // Default to mysql for backward compatibility
+    return 'mysql';
   }
 
   init() {
