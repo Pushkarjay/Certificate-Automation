@@ -33,6 +33,7 @@ Backend/test-output/
 .env.development.local
 .env.test.local
 .env.production.local
+.env.render
 
 # IDE files
 .vscode/
