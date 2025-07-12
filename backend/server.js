@@ -124,6 +124,11 @@ app.get('/health', (req, res) => {
   });
 });
 
+// Serve admin dashboard
+app.get('/admin-dashboard', (req, res) => {
+  res.sendFile(path.join(__dirname, '../admin-dashboard.html'));
+});
+
 // Serve verification page at /verify/:refNo (React app)
 app.get('/verify/:refNo?', (req, res) => {
   res.sendFile(path.join(__dirname, '../Frontend/React/build/index.html'));

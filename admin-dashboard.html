@@ -184,10 +184,24 @@
     </div>
 
     <script>
-        // Dynamic API base URL - use relative path when served from backend
-        const API_BASE = window.location.hostname === 'localhost' 
-            ? 'http://localhost:3000/api' 
-            : `${window.location.origin}/api`;
+        // Dynamic API base URL - detect environment and use correct API endpoint
+        const API_BASE = (() => {
+            const hostname = window.location.hostname;
+            const port = window.location.port;
+            
+            // If served from backend (localhost:3000 or render), use relative path
+            if (hostname === 'localhost' && port === '3000') {
+                return '/api';
+            }
+            
+            // If served from render backend, use relative path
+            if (hostname.includes('certificate-automation-dmoe.onrender.com')) {
+                return '/api';
+            }
+            
+            // For local development or file:// access, use production API
+            return 'https://certificate-automation-dmoe.onrender.com/api';
+        })();
         
         console.log('Using API base:', API_BASE);
         
