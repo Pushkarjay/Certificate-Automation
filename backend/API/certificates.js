@@ -758,7 +758,7 @@ router.post('/revoke/:id', async (req, res) => {
 // Test QR code generation endpoint
 router.get('/test-qr/:text?', async (req, res) => {
   try {
-    const testText = req.params.text || 'http://localhost:3000/verify/TEST_123';
+    const testText = req.params.text || 'https://certificate-automation-dmoe.onrender.com/verify/TEST_123';
     
     console.log('🔄 Testing QR code generation for:', testText);
     

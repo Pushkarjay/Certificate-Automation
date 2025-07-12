@@ -169,7 +169,7 @@ async function addQRCodeToCanvas(ctx, certificateData, canvasWidth, canvasHeight
     };
     
     const encryptedData = encryptQRData(JSON.stringify(qrData));
-    const verificationURL = `${process.env.VERIFICATION_BASE_URL || 'http://localhost:3000/verify/'}${certificateData.reference_number}`;
+    const verificationURL = `${process.env.VERIFICATION_BASE_URL || 'https://certificate-automation-dmoe.onrender.com/verify/'}${certificateData.reference_number}`;
     
     // Generate QR code - with enhanced settings for better visibility
     const qrCodeBuffer = await QRCode.toBuffer(verificationURL, {
@@ -409,7 +409,7 @@ async function generateSimpleCertificate(certificateData) {
     
     const refNo = certificateData.refNo || certificateData.reference_number || `${certificateData.type ? certificateData.type.toUpperCase() : 'CERT'}_${(certificateData.course || '').replace(/\s+/g, '').substring(0, 4).toUpperCase()}_${certificateData.batch || 'GEN'}_${new Date().getFullYear()}_${Date.now().toString().slice(-4)}`;
     
-    const verificationUrl = certificateData.verificationUrl || `${process.env.VERIFICATION_BASE_URL || 'http://localhost:3000/verify/'}${refNo}`;
+    const verificationUrl = certificateData.verificationUrl || `${process.env.VERIFICATION_BASE_URL || 'https://certificate-automation-dmoe.onrender.com/verify/'}${refNo}`;
     
     console.log('🔗 Generated verification URL:', verificationUrl);
     console.log('📋 Reference number:', refNo);
