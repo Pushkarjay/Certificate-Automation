@@ -58,6 +58,13 @@ const formSubmissionSchema = Joi.object({
   // Certificate type
   certificate_type: Joi.string().valid('student', 'trainer', 'trainee').default('student'),
   
+  // Metadata fields (optional, for Google Forms integration)
+  response_id: Joi.string().optional(),
+  form_id: Joi.string().optional(),
+  form_source: Joi.string().optional(),
+  raw_form_data: Joi.object().optional(),
+  additional_data: Joi.object().optional(),
+  
   // Timestamp (for Google Forms)
   timestamp: Joi.date().optional()
 }).unknown(true); // Allow additional fields
@@ -66,10 +73,11 @@ const formSubmissionSchema = Joi.object({
 router.post('/submit', async (req, res) => {
   try {
     const formData = req.body;
-    console.log('📝 Received form submission:', formData);
+    console.log('📝 Received form submission:', JSON.stringify(formData, null, 2));
 
     // Normalize Google Forms data to database format
     const normalizedData = normalizeGoogleFormData(formData);
+    console.log('🔄 Normalized data:', JSON.stringify(normalizedData, null, 2));
     
     // Validate the normalized data
     const { error, value } = formSubmissionSchema.validate(normalizedData);
@@ -81,6 +89,8 @@ router.post('/submit', async (req, res) => {
         details: error.details
       });
     }
+
+    console.log('✅ Validation passed, validated data:', JSON.stringify(value, null, 2));
 
     // Store in database
     const submissionId = await insertFormSubmission(value);
@@ -96,9 +106,11 @@ router.post('/submit', async (req, res) => {
 
   } catch (error) {
     console.error('❌ Error processing form submission:', error);
+    console.error('❌ Error stack:', error.stack);
     res.status(500).json({
       error: 'Internal server error',
-      message: 'Failed to process form submission'
+      message: 'Failed to process form submission',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 });
@@ -198,8 +210,46 @@ function normalizeGoogleFormData(formData) {
 // Function to insert form submission into database
 async function insertFormSubmission(data) {
   try {
-    const fields = Object.keys(data).filter(key => data[key] !== undefined);
-    const values = fields.map(key => data[key]);
+    // Define valid database fields for form_submissions table
+    const validFields = [
+      'timestamp', 'email_address', 'title', 'full_name', 'phone', 'date_of_birth', 'gender',
+      'address_line1', 'address_line2', 'city', 'state', 'country', 'postal_code',
+      'qualification', 'institution', 'specialization', 'experience_years', 'organization', 
+      'position', 'employee_id', 'course_name', 'course_domain', 'batch_initials', 
+      'batch_name', 'training_type', 'training_mode', 'start_date', 'end_date', 
+      'training_start_date', 'training_end_date', 'attendance_percentage', 'assessment_score', 
+      'gpa', 'grade', 'performance_rating', 'training_hours', 'training_duration_hours',
+      'certificate_type', 'status', 'additional_data', 'form_source', 'raw_form_data'
+    ];
+    
+    // Filter data to only include valid database fields
+    const filteredData = {};
+    Object.keys(data).forEach(key => {
+      if (validFields.includes(key) && data[key] !== undefined && data[key] !== null) {
+        filteredData[key] = data[key];
+      }
+    });
+    
+    // Ensure required fields have defaults
+    if (!filteredData.status) {
+      filteredData.status = 'pending';
+    }
+    if (!filteredData.form_source) {
+      filteredData.form_source = 'google_forms';
+    }
+    
+    // Store metadata in additional_data if it doesn't exist
+    if (!filteredData.additional_data) {
+      const metadata = {};
+      if (data.response_id) metadata.response_id = data.response_id;
+      if (data.form_id) metadata.form_id = data.form_id;
+      if (Object.keys(metadata).length > 0) {
+        filteredData.additional_data = JSON.stringify(metadata);
+      }
+    }
+    
+    const fields = Object.keys(filteredData);
+    const values = fields.map(key => filteredData[key]);
     const placeholders = fields.map((_, index) => `$${index + 1}`);
     
     const query = `
@@ -208,11 +258,13 @@ async function insertFormSubmission(data) {
       RETURNING submission_id
     `;
     
+    console.log('📝 Inserting data:', { fields, values });
     const result = await dbService.query(query, values);
     return result.rows[0].submission_id;
     
   } catch (error) {
     console.error('❌ Database insert error:', error);
+    console.error('❌ Error details:', error.message);
     throw error;
   }
 }
