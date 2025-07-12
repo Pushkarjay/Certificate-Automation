@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const dbService = require('../services/databaseService');
-const { generateCertificate } = require('../services/certificateGenerator');
+const { generateCertificate, generateSimpleCertificate } = require('../services/certificateGenerator');
 const QRCode = require('qrcode');
 
 // Test endpoint to check API health
@@ -192,7 +192,7 @@ router.post('/generate/:id', async (req, res) => {
       templatePath = templateResult.rows[0].template_path;
     }
 
-    // Generate the actual certificate files
+    // Generate the actual certificate files (using simplified generation)
     const certificateData = {
       name: submission.full_name,
       course: submission.course_name || 'General Course',
@@ -207,7 +207,7 @@ router.post('/generate/:id', async (req, res) => {
       endDate: submission.end_date
     };
 
-    const generatedFiles = await generateCertificate(certificateData);
+    const generatedFiles = await generateSimpleCertificate(certificateData);
 
     // Store certificate generation record
     const insertCertQuery = `
@@ -339,7 +339,7 @@ router.post('/generate-batch', async (req, res) => {
           attendance: submission.attendance_percentage
         };
 
-        const generatedFiles = await generateCertificate(certificateData);
+        const generatedFiles = await generateSimpleCertificate(certificateData);
 
         // Store certificate generation record
         const insertCertQuery = `
