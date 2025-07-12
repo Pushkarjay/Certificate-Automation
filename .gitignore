@@ -14,6 +14,18 @@ yarn-error.log*
 build/
 dist/
 
+# Generated certificates and files
+Backend/Generated-Certificates/PDF/*.pdf
+Backend/Generated-Certificates/PDF/*.png
+Backend/Generated-Certificates/PDF/*.svg
+Backend/Generated-Certificates/IMG/*.png
+Backend/Generated-Certificates/IMG/*.jpg
+Backend/Generated-Certificates/IMG/*.jpeg
+
+# Test outputs
+Backend/test-output/
+**/test-output/
+
 # Environment variables
 .env
 .env.*
@@ -68,12 +80,29 @@ confidential-templates/
 tmp/
 temp/
 
+# Local development files
+*-local.js
+*-local.json
+package-local.json
+server-local.js
+clear-database.js
+complete-reset.js
+reset-summary.md
+
 # Google Service Account Credentials
 Google/Sheet/Sheet-API.JSON
 **/google-credentials.json
 **/service-account.json
+opportune-sylph-458214-b8-490493912c83.json
+opportune-sylph-458214-b8-74a78b125fe6.json
 
 # Certificate Templates (Keep sample templates, exclude sensitive ones)
 # Backend/Certificate_Templates/sensitive-*.jpg
 # Backend/Certificate_Templates/production-*.jpg
 confidential-templates/
+
+# Development scripts (use scripts/ directory instead)
+Backend/clear-database.js
+Backend/complete-reset.js
+Backend/reset-database-with-sample.js
+Backend/test-*.js

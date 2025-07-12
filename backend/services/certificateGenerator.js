@@ -167,15 +167,17 @@ async function addQRCodeToCanvas(ctx, certificateData, canvasWidth, canvasHeight
     const encryptedData = encryptQRData(JSON.stringify(qrData));
     const verificationURL = `${process.env.VERIFICATION_BASE_URL || 'http://localhost:3000/verify/'}${certificateData.reference_number}`;
     
-    // Generate QR code - with better error handling
+    // Generate QR code - with enhanced settings for better visibility
     const qrCodeBuffer = await QRCode.toBuffer(verificationURL, {
-      width: 150,
-      margin: 1,
+      width: 200,  // Larger size for better generation
+      margin: 2,   // Better margin for scanning
       color: {
-        dark: '#000000',
-        light: '#FFFFFF'
+        dark: '#000000',    // Pure black
+        light: '#FFFFFF'    // Pure white
       },
-      errorCorrectionLevel: 'M'
+      errorCorrectionLevel: 'H',  // High error correction
+      scale: 10,  // Higher scale for crisp rendering
+      type: 'png'
     });
     
     // Check if loadImage is available
@@ -187,48 +189,86 @@ async function addQRCodeToCanvas(ctx, certificateData, canvasWidth, canvasHeight
     // Load QR code as image
     const qrImage = await loadImage(qrCodeBuffer);
     
-    // Position QR code (bottom right corner)
-    const qrSize = 100;
-    const qrX = canvasWidth - qrSize - 50;
-    const qrY = canvasHeight - qrSize - 50;
+    // Position QR code (bottom right corner) with enhanced styling
+    const qrSize = 120;  // Increased size for better visibility
+    const qrX = canvasWidth - qrSize - 40;
+    const qrY = canvasHeight - qrSize - 40;
     
-    // Add white background for QR code
+    // Add white background with padding for QR code
+    const padding = 8;
     ctx.fillStyle = '#FFFFFF';
-    ctx.fillRect(qrX - 5, qrY - 5, qrSize + 10, qrSize + 10);
+    ctx.fillRect(qrX - padding, qrY - padding, qrSize + (padding * 2), qrSize + (padding * 2));
     
-    // Add border around QR code
+    // Add double border for better visibility
     ctx.strokeStyle = '#000000';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(qrX - 5, qrY - 5, qrSize + 10, qrSize + 10);
+    ctx.lineWidth = 2;
+    ctx.strokeRect(qrX - padding, qrY - padding, qrSize + (padding * 2), qrSize + (padding * 2));
     
+    // Add inner border
+    ctx.strokeStyle = '#333333';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(qrX - 2, qrY - 2, qrSize + 4, qrSize + 4);
+    
+    // Draw the QR code
     ctx.drawImage(qrImage, qrX, qrY, qrSize, qrSize);
+    
+    // Add verification text below QR code
+    ctx.fillStyle = '#000000';
+    ctx.font = 'bold 10px Arial, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('SCAN TO VERIFY', qrX + qrSize/2, qrY + qrSize + 20);
+    
+    ctx.font = '8px Arial, sans-serif';
+    ctx.fillStyle = '#666666';
+    ctx.fillText('Certificate Authenticity', qrX + qrSize/2, qrY + qrSize + 35);
     
     console.log('✅ QR code successfully added to certificate');
     
   } catch (error) {
     console.warn('⚠️ QR code generation failed:', error.message);
-    // Add fallback QR placeholder
+    // Add enhanced fallback QR placeholder
     try {
-      const qrSize = 100;
-      const qrX = canvasWidth - qrSize - 50;
-      const qrY = canvasHeight - qrSize - 50;
+      const qrSize = 120;  // Match the enhanced size
+      const qrX = canvasWidth - qrSize - 40;
+      const qrY = canvasHeight - qrSize - 40;
       
-      // Draw QR placeholder
-      ctx.fillStyle = '#F0F0F0';
-      ctx.fillRect(qrX, qrY, qrSize, qrSize);
-      ctx.strokeStyle = '#000000';
+      // Draw QR placeholder with better design
+      const padding = 8;
+      ctx.fillStyle = '#F8F8F8';
+      ctx.fillRect(qrX - padding, qrY - padding, qrSize + (padding * 2), qrSize + (padding * 2));
+      
+      ctx.strokeStyle = '#CCCCCC';
       ctx.lineWidth = 2;
-      ctx.strokeRect(qrX, qrY, qrSize, qrSize);
+      ctx.strokeRect(qrX - padding, qrY - padding, qrSize + (padding * 2), qrSize + (padding * 2));
       
-      // Add "QR" text
-      ctx.fillStyle = '#000000';
-      ctx.font = '16px Arial, sans-serif';
+      // Create a grid pattern for QR placeholder
+      ctx.fillStyle = '#DDDDDD';
+      const cellSize = 8;
+      for (let i = 0; i < qrSize; i += cellSize) {
+        for (let j = 0; j < qrSize; j += cellSize) {
+          if ((Math.floor(i/cellSize) + Math.floor(j/cellSize)) % 2 === 0) {
+            ctx.fillRect(qrX + i, qrY + j, cellSize, cellSize);
+          }
+        }
+      }
+      
+      // Add "QR" text in center
+      ctx.fillStyle = '#666666';
+      ctx.font = 'bold 24px Arial, sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText('QR', qrX + qrSize/2, qrY + qrSize/2);
+      ctx.fillText('QR', qrX + qrSize/2, qrY + qrSize/2 + 8);
       
-      console.log('⚠️ QR placeholder added instead');
+      // Add verification text
+      ctx.font = 'bold 10px Arial, sans-serif';
+      ctx.fillStyle = '#999999';
+      ctx.fillText('VERIFICATION CODE', qrX + qrSize/2, qrY + qrSize + 20);
+      
+      ctx.font = '8px Arial, sans-serif';
+      ctx.fillText('Not Available', qrX + qrSize/2, qrY + qrSize + 35);
+      
+      console.log('⚠️ Enhanced QR placeholder added instead');
     } catch (placeholderError) {
-      console.error('❌ Even QR placeholder failed:', placeholderError.message);
+      console.error('❌ Even enhanced QR placeholder failed:', placeholderError.message);
     }
   }
 }
@@ -790,20 +830,21 @@ async function generateFallbackCertificate(certificateData, pdfPath, refNo, veri
   try {
     console.log('🔄 Generating fallback certificate using PDFKit...');
     
-    // Generate QR code as buffer first
+    // Generate QR code as buffer first with enhanced settings
     let qrCodeBuffer = null;
     try {
       qrCodeBuffer = await QRCode.toBuffer(verificationUrl, {
-        width: 120,
-        margin: 1,
+        width: 150,  // Increased size for better visibility
+        margin: 2,   // More margin for better scanning
         color: {
-          dark: '#000000',
-          light: '#FFFFFF'
+          dark: '#000000',    // Pure black for contrast
+          light: '#FFFFFF'    // Pure white background
         },
-        errorCorrectionLevel: 'M',
-        type: 'png'
+        errorCorrectionLevel: 'H',  // High error correction for better scanning
+        type: 'png',
+        scale: 8  // Higher scale for crisp rendering
       });
-      console.log('✅ QR code buffer generated for PDF');
+      console.log('✅ Enhanced QR code buffer generated for PDF');
     } catch (qrError) {
       console.warn('⚠️ QR code generation failed for PDF:', qrError.message);
     }
@@ -855,28 +896,81 @@ async function generateFallbackCertificate(certificateData, pdfPath, refNo, veri
            .fillColor('#34495e')
            .text(`Date: ${new Date().toLocaleDateString()}`, 50, 410, { align: 'center' });
     
-    // Add QR code to PDF if available
+    // Add QR code to PDF if available with enhanced visibility
     if (qrCodeBuffer) {
       try {
-        // Position QR code in bottom right
-        const qrSize = 80;
+        // Position QR code in bottom right with better spacing
+        const qrSize = 100;  // Optimal size for scanning
         const pageWidth = pdfDoc.page.width;
         const pageHeight = pdfDoc.page.height;
-        const qrX = pageWidth - qrSize - 80;
-        const qrY = pageHeight - qrSize - 80;
+        const qrX = pageWidth - qrSize - 60;
+        const qrY = pageHeight - qrSize - 60;
         
+        // Add white background rectangle for QR code
+        pdfDoc.rect(qrX - 10, qrY - 10, qrSize + 20, qrSize + 20)
+               .fillColor('#FFFFFF')
+               .fill()
+               .stroke('#000000');
+        
+        // Add the QR code image
         pdfDoc.image(qrCodeBuffer, qrX, qrY, { width: qrSize, height: qrSize });
         
-        // Add verification text near QR code
-        pdfDoc.fontSize(10)
+        // Add verification text with better formatting
+        pdfDoc.fontSize(9)
+               .font('Helvetica-Bold')
+               .fillColor('#2c3e50')
+               .text('SCAN TO VERIFY', qrX - 15, qrY + qrSize + 15, { width: qrSize + 30, align: 'center' });
+        
+        pdfDoc.fontSize(8)
                .font('Helvetica')
                .fillColor('#7f8c8d')
-               .text('Scan to verify', qrX - 10, qrY + qrSize + 10, { width: qrSize + 20, align: 'center' });
+               .text('Certificate Authenticity', qrX - 15, qrY + qrSize + 30, { width: qrSize + 30, align: 'center' });
         
-        console.log('✅ QR code added to PDF certificate');
+        console.log('✅ Enhanced QR code added to PDF certificate');
       } catch (qrAddError) {
         console.warn('⚠️ Failed to add QR code to PDF:', qrAddError.message);
+        
+        // Add fallback QR placeholder with better design
+        const qrSize = 100;
+        const pageWidth = pdfDoc.page.width;
+        const pageHeight = pdfDoc.page.height;
+        const qrX = pageWidth - qrSize - 60;
+        const qrY = pageHeight - qrSize - 60;
+        
+        pdfDoc.rect(qrX, qrY, qrSize, qrSize)
+               .fillColor('#F5F5F5')
+               .fill()
+               .stroke('#000000');
+               
+        pdfDoc.fontSize(12)
+               .font('Helvetica-Bold')
+               .fillColor('#666666')
+               .text('QR CODE', qrX + 25, qrY + 35, { align: 'center' });
+               
+        pdfDoc.fontSize(8)
+               .text('Not Available', qrX + 25, qrY + 55, { align: 'center' });
       }
+    } else {
+      // Better fallback when QR buffer is not available
+      const qrSize = 100;
+      const pageWidth = pdfDoc.page.width;
+      const pageHeight = pdfDoc.page.height;
+      const qrX = pageWidth - qrSize - 60;
+      const qrY = pageHeight - qrSize - 60;
+      
+      pdfDoc.rect(qrX, qrY, qrSize, qrSize)
+             .fillColor('#F9F9F9')
+             .fill()
+             .stroke('#CCCCCC');
+             
+      pdfDoc.fontSize(14)
+             .font('Helvetica-Bold')
+             .fillColor('#999999')
+             .text('QR', qrX + 35, qrY + 40, { align: 'center' });
+             
+      pdfDoc.fontSize(8)
+             .font('Helvetica')
+             .text('Verification Code', qrX + 10, qrY + 60, { align: 'center' });
     }
     
     pdfDoc.fontSize(12)
