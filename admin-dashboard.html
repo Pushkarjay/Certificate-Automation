@@ -383,7 +383,16 @@
                                             ${cert.status === 'pending' ? 
                                                 `<button class="generate" onclick="generateCertificate('${cert.id}')">Generate</button>` :
                                                 cert.verification_url ? 
-                                                    `<a href="${cert.verification_url}" target="_blank" style="color: #28a745; text-decoration: none;">View Certificate</a>` :
+                                                    `<div>
+                                                        <a href="${cert.verification_url}" target="_blank" style="color: #28a745; text-decoration: none;">View Certificate</a><br>
+                                                        ${cert.certificate_ref_no ? 
+                                                            `<div style="margin-top: 5px;">
+                                                                <a href="/certificates/img/${cert.certificate_ref_no}.png" target="_blank" style="color: #007bff; font-size: 0.8em; margin-right: 8px;" onclick="event.stopPropagation()">IMG</a>
+                                                                <a href="/certificates/pdf/${cert.certificate_ref_no}.pdf" target="_blank" style="color: #dc3545; font-size: 0.8em;" onclick="event.stopPropagation()">PDF</a>
+                                                            </div>` : ''
+                                                        }
+                                                        <small style="color: #666;">Ref: ${cert.certificate_ref_no || 'N/A'}</small>
+                                                    </div>` :
                                                     `<span style="color: #28a745;">✓ ${cert.status}</span>`
                                             }
                                         </td>
@@ -427,7 +436,7 @@
         // Generate single certificate
         async function generateCertificate(id) {
             try {
-                showMessage('Generating certificate...', 'loading');
+                showMessage('Generating certificate... This may take a moment.', 'loading');
                 
                 const response = await fetch(`${API_BASE}/certificates/generate/${id}`, {
                     method: 'POST'
@@ -436,14 +445,22 @@
                 const data = await response.json();
                 
                 if (response.ok) {
-                    showMessage(`Certificate generated successfully! Reference: ${data.certificate_ref_no || data.referenceNumber}`, 'success');
+                    let message = `Certificate generated successfully!`;
+                    if (data.certificate_ref_no || data.referenceNumber) {
+                        message += ` Reference: ${data.certificate_ref_no || data.referenceNumber}`;
+                    }
+                    if (data.verificationUrl) {
+                        message += `<br><a href="${data.verificationUrl}" target="_blank" style="color: #28a745;">View Certificate</a>`;
+                    }
+                    showMessage(message, 'success');
                     loadCertificates();
                     loadStats();
                 } else {
-                    showMessage('Error: ' + (data.error || data.message), 'error');
+                    showMessage('Error: ' + (data.error || data.message || 'Unknown error occurred'), 'error');
                 }
             } catch (error) {
-                showMessage('Error generating certificate: ' + error.message, 'error');
+                console.error('Certificate generation error:', error);
+                showMessage('Error generating certificate: ' + error.message + '. Please check your connection and try again.', 'error');
             }
         }
         
