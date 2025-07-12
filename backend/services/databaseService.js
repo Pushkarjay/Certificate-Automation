@@ -25,8 +25,8 @@ class DatabaseService {
       return 'postgresql';
     }
     
-    // Default to mysql for backward compatibility
-    return 'mysql';
+    // Default to postgresql for this project
+    return 'postgresql';
   }
 
   init() {
@@ -38,17 +38,28 @@ class DatabaseService {
   }
 
   initPostgreSQL() {
-    const connectionString = process.env.DATABASE_URL || `postgresql://${process.env.DB_USER}:${process.env.DB_PASSWORD}@${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME}`;
+    // For testing - use hardcoded connection config
+    console.log('🔄 Initializing PostgreSQL with hardcoded config for testing');
     
-    this.pool = new Pool({
-      connectionString,
-      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+    const poolConfig = {
+      host: 'dpg-d1p19f7fte5s73br93k0-a.oregon-postgres.render.com',
+      port: 5432,
+      user: 'certificate_db_44nb_user',
+      password: 'bjfK6mi1OXHXE0tYBw8YjtzrWOHX6EhM',
+      database: 'certificate_db_44nb',
+      ssl: { rejectUnauthorized: false },
       max: 20,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 2000,
-    });
-
-    console.log('✅ PostgreSQL pool initialized');
+    };
+    
+    try {
+      this.pool = new Pool(poolConfig);
+      console.log('✅ PostgreSQL pool initialized');
+    } catch (error) {
+      console.error('❌ Error initializing PostgreSQL pool:', error);
+      throw error;
+    }
   }
 
   initMySQL() {
@@ -238,6 +249,16 @@ class DatabaseService {
       }
       console.log('📴 Database connection closed');
     }
+  }
+
+  // Add missing getPool method
+  getPool() {
+    return this.pool;
+  }
+
+  // Add getDatabaseType method
+  getDatabaseType() {
+    return this.dbType;
   }
 }
 

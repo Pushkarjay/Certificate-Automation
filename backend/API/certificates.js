@@ -4,6 +4,15 @@ const dbService = require('../services/databaseService');
 const { generateCertificate, generateSimpleCertificate } = require('../services/certificateGenerator');
 const QRCode = require('qrcode');
 
+// Initialize database connection
+let pool;
+try {
+  pool = dbService.getPool();
+  console.log('✅ Database service initialized for certificates API');
+} catch (error) {
+  console.error('❌ Database service initialization failed:', error);
+}
+
 // Test endpoint to check API health
 router.get('/test', async (req, res) => {
   try {
@@ -77,8 +86,8 @@ router.get('/', async (req, res) => {
     const countParams = params.slice(0, -2); // Remove limit and offset
 
     const [certificates, countResult] = await Promise.all([
-      dbService.query(query, params),
-      dbService.query(countQuery, countParams)
+      pool ? pool.query(query, params) : dbService.query(query, params),
+      pool ? pool.query(countQuery, countParams) : dbService.query(countQuery, countParams)
     ]);
 
     res.json({
@@ -622,12 +631,12 @@ router.post('/revoke/:id', async (req, res) => {
     
     // Check if the certificate exists and is in a revokable state
     const checkQuery = `
-      SELECT submission_id, full_name, email_address, status, certificate_ref_no
+      SELECT submission_id, full_name, email_address, status
       FROM form_submissions 
       WHERE submission_id = $1
     `;
     
-    const checkResult = await dbService.query(checkQuery, [submissionId]);
+    const checkResult = await (pool ? pool.query(checkQuery, [submissionId]) : dbService.query(checkQuery, [submissionId]));
     
     if (checkResult.rows.length === 0) {
       return res.status(404).json({ 
@@ -653,9 +662,25 @@ router.post('/revoke/:id', async (req, res) => {
         message: 'This certificate has already been revoked.'
       });
     }
+
+    // Get certificate generation details for reference
+    const certGenQuery = `
+      SELECT certificate_ref_no, certificate_id 
+      FROM certificate_generations 
+      WHERE submission_id = $1
+    `;
     
-    // Update the certificate status to revoked
-    const revokeQuery = `
+    const certGenResult = await (pool ? pool.query(certGenQuery, [submissionId]) : dbService.query(certGenQuery, [submissionId]));
+    
+    let certificateRefNo = null;
+    let certificateId = null;
+    if (certGenResult.rows.length > 0) {
+      certificateRefNo = certGenResult.rows[0].certificate_ref_no;
+      certificateId = certGenResult.rows[0].certificate_id;
+    }
+    
+    // Update the submission status to revoked
+    const revokeSubmissionQuery = `
       UPDATE form_submissions 
       SET 
         status = 'revoked',
@@ -664,46 +689,59 @@ router.post('/revoke/:id', async (req, res) => {
         revoked_by = $3,
         updated_at = CURRENT_TIMESTAMP
       WHERE submission_id = $1
-      RETURNING *
+      RETURNING submission_id, full_name, email_address, status, revoked_at, revocation_reason, revoked_by
     `;
     
-    const revokeParams = [
+    const revokeSubmissionParams = [
       submissionId,
       reason || 'Revoked by administrator',
       revokedBy || 'admin'
     ];
     
-    const revokeResult = await dbService.query(revokeQuery, revokeParams);
+    const revokeSubmissionResult = await (pool ? pool.query(revokeSubmissionQuery, revokeSubmissionParams) : dbService.query(revokeSubmissionQuery, revokeSubmissionParams));
     
-    if (revokeResult.rows.length === 0) {
+    if (revokeSubmissionResult.rows.length === 0) {
       return res.status(500).json({
-        error: 'Failed to revoke certificate',
-        message: 'Certificate revocation failed due to database error.'
+        error: 'Failed to revoke certificate submission',
+        message: 'Certificate submission revocation failed due to database error.'
       });
     }
+
+    // Also update the certificate generation status if it exists
+    if (certificateId) {
+      const revokeCertGenQuery = `
+        UPDATE certificate_generations 
+        SET 
+          status = 'revoked',
+          updated_at = CURRENT_TIMESTAMP
+        WHERE certificate_id = $1
+      `;
+      
+      await (pool ? pool.query(revokeCertGenQuery, [certificateId]) : dbService.query(revokeCertGenQuery, [certificateId]));
+    }
     
-    const revokedCertificate = revokeResult.rows[0];
-    
+    const revokedSubmission = revokeSubmissionResult.rows[0];
+
     console.log(`✅ Certificate revoked successfully:`, {
       id: submissionId,
-      name: revokedCertificate.full_name,
-      refNo: revokedCertificate.certificate_ref_no,
+      name: revokedSubmission.full_name,
+      refNo: certificateRefNo,
       reason: reason
     });
-    
+
     // Return success response
     res.json({
       success: true,
       message: 'Certificate revoked successfully',
       certificate: {
-        id: revokedCertificate.submission_id,
-        certificate_ref_no: revokedCertificate.certificate_ref_no,
-        full_name: revokedCertificate.full_name,
-        email: revokedCertificate.email_address,
-        status: revokedCertificate.status,
-        revoked_at: revokedCertificate.revoked_at,
-        revocation_reason: revokedCertificate.revocation_reason,
-        revoked_by: revokedCertificate.revoked_by
+        id: revokedSubmission.submission_id,
+        certificate_ref_no: certificateRefNo,
+        full_name: revokedSubmission.full_name,
+        email: revokedSubmission.email_address,
+        status: revokedSubmission.status,
+        revoked_at: revokedSubmission.revoked_at,
+        revocation_reason: revokedSubmission.revocation_reason,
+        revoked_by: revokedSubmission.revoked_by
       }
     });
 
@@ -713,6 +751,105 @@ router.post('/revoke/:id', async (req, res) => {
       error: 'Internal server error',
       message: 'Failed to revoke certificate. Please try again later.',
       details: error.message 
+    });
+  }
+});
+
+// Test QR code generation endpoint
+router.get('/test-qr/:text?', async (req, res) => {
+  try {
+    const testText = req.params.text || 'http://localhost:3000/verify/TEST_123';
+    
+    console.log('🔄 Testing QR code generation for:', testText);
+    
+    // Test basic QR code generation
+    const qrDataURL = await QRCode.toDataURL(testText, {
+      width: 200,
+      margin: 2,
+      color: {
+        dark: '#000000',
+        light: '#FFFFFF'
+      },
+      errorCorrectionLevel: 'M'
+    });
+    
+    // Test buffer generation
+    const qrBuffer = await QRCode.toBuffer(testText, {
+      width: 150,
+      margin: 1,
+      color: {
+        dark: '#000000',
+        light: '#FFFFFF'
+      },
+      errorCorrectionLevel: 'M',
+      type: 'png'
+    });
+    
+    console.log('✅ QR code generation test successful');
+    
+    res.json({
+      success: true,
+      message: 'QR code generation working',
+      qrDataURL: qrDataURL,
+      bufferSize: qrBuffer.length,
+      testText: testText,
+      qrCodeStats: {
+        dataURLLength: qrDataURL.length,
+        bufferLength: qrBuffer.length,
+        timestamp: new Date().toISOString()
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ QR code generation test failed:', error);
+    res.status(500).json({
+      success: false,
+      error: 'QR code generation failed',
+      message: error.message,
+      stack: error.stack
+    });
+  }
+});
+
+// Test revocation functionality
+router.get('/test-revoke/:id?', async (req, res) => {
+  try {
+    const testId = req.params.id || '1';
+    
+    console.log('🔄 Testing revocation functionality for ID:', testId);
+    
+    // Test database connection
+    const testQuery = `SELECT submission_id, full_name, status FROM form_submissions LIMIT 5`;
+    const testResult = await (pool ? pool.query(testQuery) : dbService.query(testQuery));
+    
+    console.log('✅ Database connection test successful');
+    
+    res.json({
+      success: true,
+      message: 'Revocation functionality test',
+      databaseStatus: 'Connected',
+      sampleRecords: testResult.rows.length,
+      availableCertificates: testResult.rows.map(row => ({
+        id: row.submission_id,
+        name: row.full_name,
+        status: row.status
+      })),
+      instructions: {
+        revoke: `POST /api/certificates/revoke/${testId}`,
+        payload: {
+          reason: 'Test revocation',
+          revokedBy: 'admin'
+        }
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Revocation test failed:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Revocation test failed',
+      message: error.message,
+      databaseStatus: 'Error'
     });
   }
 });

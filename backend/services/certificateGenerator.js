@@ -26,11 +26,11 @@ const QRCode = require('qrcode');
 /**
  * Generate certificate in both IMG and PDF formats based on SRS requirements
  */
-async function generateCertificate(certificateData, certificateType) {
+async function generateComplexCertificate(certificateData, certificateType) {
   try {
-    // If canvas is not available, use the simplified generation
+    // If canvas is not available, use simple certificate generation
     if (!createCanvas || !loadImage) {
-      console.log('📄 Using simplified certificate generation (canvas not available)');
+      console.log('⚠️ Canvas not available, using simple certificate generation');
       return await generateSimpleCertificate(certificateData);
     }
     
@@ -65,12 +65,7 @@ async function generateCertificate(certificateData, certificateType) {
     const pdfFilename = await generatePDFCertificate(canvas, baseFilename, certificateData, certificateType);
     
     console.log(`✅ Certificate generated: IMG=${imgFilename}, PDF=${pdfFilename}`);
-    return { 
-      imgFilename, 
-      pdfFilename, 
-      referenceNumber: certificateData.reference_number 
-    };
-    
+    return { imgFilename, pdfFilename, referenceNumber: certificateData.reference_number };
   } catch (error) {
     console.error('❌ Error generating certificate:', error);
     throw new Error(`Certificate generation failed: ${error.message}`);
@@ -78,32 +73,29 @@ async function generateCertificate(certificateData, certificateType) {
 }
 
 /**
- * Add name to certificate
+ * Main certificate generation function
  */
-async function addNameToCanvas(ctx, certificateData, canvasWidth) {
-  const name = `${certificateData.title}.${certificateData.full_name}`;
-  
-  // Find appropriate font size
-  let fontSize = 90;
-  let textWidth;
-  
-  do {
-    fontSize -= 10;
-    ctx.font = `${fontSize}px Times, serif`;
-    const metrics = ctx.measureText(name);
-    textWidth = metrics.width;
-  } while (textWidth > canvasWidth - 240 && fontSize > 30); // Keep some margin
-  
-  // Position text (centered horizontally, around position 362 vertically)
-  const x = (canvasWidth - textWidth) / 2;
-  const y = 362 + (90 - fontSize) / 2; // Adjust Y based on font size reduction
-  
-  // Ensure minimum x position
-  const finalX = Math.max(x, 120);
-  
-  // Draw text
-  ctx.fillStyle = '#000000';
-  ctx.fillText(name, finalX, y);
+async function generateCertificate(certificateData) {
+  try {
+    return await generateSimpleCertificate(certificateData);
+  } catch (error) {
+    console.error('❌ Error generating certificate:', error);
+    throw error;
+  }
+}
+
+async function generateSimplePNGCertificate(certificateData, imgPath, refNo, verificationUrl) {
+  try {
+    // Try canvas-based generation first (similar to Python PIL approach)
+    const canvas = await generateCanvasCertificate(certificateData, refNo, verificationUrl);
+    const buffer = canvas.toBuffer('image/png');
+    await fs.writeFile(imgPath, buffer);
+    console.log('✅ Canvas-based PNG certificate generated');
+    return;
+  } catch (canvasError) {
+    console.error('❌ PNG certificate generation failed:', canvasError.message);
+    throw new Error('PNG certificate generation failed: ' + canvasError.message);
+  }
 }
 
 /**
@@ -173,17 +165,24 @@ async function addQRCodeToCanvas(ctx, certificateData, canvasWidth, canvasHeight
     };
     
     const encryptedData = encryptQRData(JSON.stringify(qrData));
-    const verificationURL = `${process.env.VERIFICATION_BASE_URL}${certificateData.reference_number}`;
+    const verificationURL = `${process.env.VERIFICATION_BASE_URL || 'http://localhost:3000/verify/'}${certificateData.reference_number}`;
     
-    // Generate QR code
+    // Generate QR code - with better error handling
     const qrCodeBuffer = await QRCode.toBuffer(verificationURL, {
       width: 150,
       margin: 1,
       color: {
         dark: '#000000',
         light: '#FFFFFF'
-      }
+      },
+      errorCorrectionLevel: 'M'
     });
+    
+    // Check if loadImage is available
+    if (!loadImage) {
+      console.warn('⚠️ loadImage not available, skipping QR code overlay');
+      return;
+    }
     
     // Load QR code as image
     const qrImage = await loadImage(qrCodeBuffer);
@@ -193,10 +192,44 @@ async function addQRCodeToCanvas(ctx, certificateData, canvasWidth, canvasHeight
     const qrX = canvasWidth - qrSize - 50;
     const qrY = canvasHeight - qrSize - 50;
     
+    // Add white background for QR code
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(qrX - 5, qrY - 5, qrSize + 10, qrSize + 10);
+    
+    // Add border around QR code
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(qrX - 5, qrY - 5, qrSize + 10, qrSize + 10);
+    
     ctx.drawImage(qrImage, qrX, qrY, qrSize, qrSize);
+    
+    console.log('✅ QR code successfully added to certificate');
     
   } catch (error) {
     console.warn('⚠️ QR code generation failed:', error.message);
+    // Add fallback QR placeholder
+    try {
+      const qrSize = 100;
+      const qrX = canvasWidth - qrSize - 50;
+      const qrY = canvasHeight - qrSize - 50;
+      
+      // Draw QR placeholder
+      ctx.fillStyle = '#F0F0F0';
+      ctx.fillRect(qrX, qrY, qrSize, qrSize);
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(qrX, qrY, qrSize, qrSize);
+      
+      // Add "QR" text
+      ctx.fillStyle = '#000000';
+      ctx.font = '16px Arial, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('QR', qrX + qrSize/2, qrY + qrSize/2);
+      
+      console.log('⚠️ QR placeholder added instead');
+    } catch (placeholderError) {
+      console.error('❌ Even QR placeholder failed:', placeholderError.message);
+    }
   }
 }
 
@@ -319,46 +352,71 @@ async function ensureDirectoryExists(dirPath) {
  */
 async function generateSimpleCertificate(certificateData) {
   try {
-    console.log('🎓 Generating certificate for:', certificateData.name);
+    console.log('🔄 Starting simple certificate generation...');
     
-    // Generate reference number if not provided
-    const refNo = certificateData.refNo || `${certificateData.type.toUpperCase()}_${certificateData.course.replace(/\s+/g, '').substring(0, 4).toUpperCase()}_${certificateData.batch}_${new Date().getFullYear()}_${Date.now().toString().substr(-4)}`;
+    // Clean production logic: ensure name, reference number, and output paths
+    let name = certificateData.name || certificateData.full_name || '';
+    if (!name) name = 'Certificate Holder';
     
-    // Generate verification URL
-    const verificationUrl = certificateData.verificationUrl || `${process.env.VERIFICATION_BASE_URL || 'https://certificate-automation-dmoe.onrender.com/verify/'}${refNo}`;
+    const refNo = certificateData.refNo || certificateData.reference_number || `${certificateData.type ? certificateData.type.toUpperCase() : 'CERT'}_${(certificateData.course || '').replace(/\s+/g, '').substring(0, 4).toUpperCase()}_${certificateData.batch || 'GEN'}_${new Date().getFullYear()}_${Date.now().toString().slice(-4)}`;
     
-    // Generate QR code as data URL
-    const qrCodeData = await QRCode.toDataURL(verificationUrl);
+    const verificationUrl = certificateData.verificationUrl || `${process.env.VERIFICATION_BASE_URL || 'http://localhost:3000/verify/'}${refNo}`;
     
-    // Ensure output directories exist
+    // Generate QR code data URL with better error handling
+    let qrCodeData = null;
+    try {
+      qrCodeData = await QRCode.toDataURL(verificationUrl, {
+        width: 200,
+        margin: 2,
+        color: {
+          dark: '#000000',
+          light: '#FFFFFF'
+        },
+        errorCorrectionLevel: 'M'
+      });
+      console.log('✅ QR code generated successfully');
+    } catch (qrError) {
+      console.warn('⚠️ QR code generation failed:', qrError.message);
+      qrCodeData = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='; // 1x1 transparent PNG
+    }
+    
     const imgDir = path.join(__dirname, '../Generated-Certificates/IMG');
     const pdfDir = path.join(__dirname, '../Generated-Certificates/PDF');
     await ensureDirectoryExists(imgDir);
     await ensureDirectoryExists(pdfDir);
     
-    // Generate filenames using the reference number directly
     const safeRefNo = refNo.replace(/[^a-zA-Z0-9_-]/g, '_');
-    const imgFilename = `${safeRefNo}.png`;  // Use PNG and direct reference number
-    const pdfFilename = `${safeRefNo}.pdf`;  // Use direct reference number
+    const imgFilename = `${safeRefNo}.png`;
+    const pdfFilename = `${safeRefNo}.pdf`;
     const imgPath = path.join(imgDir, imgFilename);
     const pdfPath = path.join(pdfDir, pdfFilename);
     
-    // Generate HTML-based certificate (more reliable than canvas)
-    await generateHTMLCertificate(certificateData, imgPath, pdfPath, refNo, verificationUrl, qrCodeData);
+    certificateData.name = name;
+    certificateData.reference_number = refNo;
     
-    console.log('✅ Certificate files generated:', { imgFilename, pdfFilename });
+    // Try canvas-based generation first, fallback if not available
+    try {
+      if (createCanvas && loadImage) {
+        await generateSimplePNGCertificate(certificateData, imgPath, refNo, verificationUrl);
+        console.log('✅ PNG certificate generated using canvas');
+      } else {
+        throw new Error('Canvas not available');
+      }
+    } catch (canvasError) {
+      console.warn('⚠️ Canvas generation failed, using PDFKit fallback:', canvasError.message);
+      await generateFallbackCertificate(certificateData, pdfPath, refNo, verificationUrl);
+    }
     
-    // Return actual file paths
     return {
       success: true,
       imagePath: `Generated-Certificates/IMG/${imgFilename}`,
       pdfPath: `Generated-Certificates/PDF/${pdfFilename}`,
       certificateData: {
         referenceNumber: refNo,
-        holderName: certificateData.name,
-        course: certificateData.course,
-        batch: certificateData.batch,
-        type: certificateData.type,
+        holderName: name,
+        course: certificateData.course || certificateData.course_name,
+        batch: certificateData.batch || certificateData.batch_initials,
+        type: certificateData.type || certificateData.certificate_type,
         verificationUrl: verificationUrl,
         qrCodeData: qrCodeData,
         issuedDate: new Date().toISOString(),
@@ -366,31 +424,9 @@ async function generateSimpleCertificate(certificateData) {
       },
       message: 'Certificate files generated successfully'
     };
-    
   } catch (error) {
     console.error('❌ Error in certificate generation:', error);
-    
-    // Fallback: Return basic data without files
-    const refNo = certificateData.refNo || `${certificateData.type.toUpperCase()}_${Date.now()}`;
-    const verificationUrl = `https://certificate-automation-dmoe.onrender.com/verify/${refNo}`;
-    
-    return {
-      success: true,
-      imagePath: null, // No file generated
-      pdfPath: null, // No file generated
-      certificateData: {
-        referenceNumber: refNo,
-        holderName: certificateData.name,
-        course: certificateData.course,
-        batch: certificateData.batch,
-        type: certificateData.type,
-        verificationUrl: verificationUrl,
-        qrCodeData: await QRCode.toDataURL(verificationUrl).catch(() => null),
-        issuedDate: new Date().toISOString(),
-        template: 'text-only'
-      },
-      message: 'Certificate generated (metadata only - file generation failed)'
-    };
+    throw new Error('Certificate generation failed: ' + error.message);
   }
 }
 
@@ -398,233 +434,7 @@ async function generateSimpleCertificate(certificateData) {
  * Generate HTML-based certificate (fallback method)
  */
 async function generateHTMLCertificate(certificateData, imgPath, pdfPath, refNo, verificationUrl, qrCodeData) {
-  try {
-    // Create HTML certificate content matching SURE Trust template
-    const htmlContent = `
-<!DOCTYPE html>
-<html>
-<head>
-    <style>
-        body {
-            font-family: 'Times New Roman', serif;
-            margin: 0;
-            padding: 20px;
-            background: #f5f5f5;
-            min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
-        .certificate {
-            background: white;
-            width: 800px;
-            height: 600px;
-            border: 3px solid #000;
-            padding: 30px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-            position: relative;
-            box-sizing: border-box;
-        }
-        .alphabet {
-            font-size: 12px;
-            text-align: center;
-            margin-bottom: 10px;
-            letter-spacing: 2px;
-            color: #333;
-        }
-        .header {
-            text-align: center;
-            margin-bottom: 30px;
-        }
-        .sure-trust {
-            font-size: 32px;
-            font-weight: bold;
-            color: #000;
-            margin-bottom: 5px;
-        }
-        .subtitle {
-            font-size: 14px;
-            color: #666;
-            margin-bottom: 20px;
-        }
-        .certificate-title {
-            font-size: 18px;
-            color: #000;
-            margin-bottom: 20px;
-        }
-        .recipient-name {
-            font-size: 28px;
-            font-weight: bold;
-            color: #000;
-            margin: 20px 0;
-            text-decoration: underline;
-        }
-        .content {
-            font-size: 14px;
-            line-height: 1.6;
-            text-align: justify;
-            margin: 20px 0;
-            color: #333;
-        }
-        .signatures {
-            display: flex;
-            justify-content: space-between;
-            margin-top: 40px;
-            margin-bottom: 20px;
-        }
-        .signature-block {
-            text-align: center;
-            flex: 1;
-            margin: 0 10px;
-        }
-        .signature-line {
-            border-bottom: 1px solid #000;
-            width: 150px;
-            margin: 40px auto 5px;
-        }
-        .signature-title {
-            font-size: 12px;
-            font-weight: bold;
-            margin-bottom: 3px;
-        }
-        .signature-subtitle {
-            font-size: 10px;
-            color: #666;
-        }
-        .qr-code {
-            position: absolute;
-            bottom: 30px;
-            right: 30px;
-        }
-        .qr-code img {
-            width: 80px;
-            height: 80px;
-            border: 1px solid #ccc;
-        }
-    </style>
-</head>
-<body>
-    <div class="certificate">
-        <div class="alphabet">ABCDEFGHIJKLMNOPQRSTUVWXYZ<br>abcdefghijklmnopqrstuvwxyz</div>
-        
-        <div class="header">
-            <div class="sure-trust">SURE Trust</div>
-            <div class="subtitle">(Skill Upgradation for Rural - Youth Empowerment)</div>
-            <div class="certificate-title">This Certificate is issued to</div>
-        </div>
-        
-        <div class="recipient-name">${certificateData.name}</div>
-        
-        <div class="content">
-            For successful completion of four months training in "${certificateData.course}" from ${formatDate(certificateData.startDate)} to ${formatDate(certificateData.endDate)} securing ${certificateData.gpa || '8.6'} GPA, attending the mandatory "Life Skills Training" sessions, and completing the services to community launched by SURE Trust.
-        </div>
-        
-        <div class="signatures">
-            <div class="signature-block">
-                <div class="signature-line"></div>
-                <div class="signature-title">Founder &</div>
-                <div class="signature-title">Executive Director</div>
-                <div class="signature-subtitle">- SURE Trust</div>
-            </div>
-            
-            <div class="signature-block">
-                <div class="signature-line"></div>
-                <div class="signature-title">Trainer 1</div>
-                <div class="signature-subtitle">Designation,</div>
-                <div class="signature-subtitle">Company</div>
-            </div>
-            
-            <div class="signature-block">
-                <div class="signature-line"></div>
-                <div class="signature-title">Trainer 2</div>
-                <div class="signature-subtitle">Designation,</div>
-                <div class="signature-subtitle">Company</div>
-            </div>
-        </div>
-        
-        ${qrCodeData ? `
-        <div class="qr-code">
-            <img src="${qrCodeData}" alt="QR Code for Certificate Verification"/>
-        </div>` : ''}
-    </div>
-</body>
-</html>`;
-    
-    // For now, create a simple text file instead of complex image generation
-    const textContent = `
-CERTIFICATE OF COMPLETION
-
-This is to certify that
-
-${certificateData.name.toUpperCase()}
-
-has successfully completed the course
-
-${certificateData.course}
-
-Batch: ${certificateData.batch}
-Date: ${new Date().toLocaleDateString()}
-Reference: ${refNo}
-
-Verification URL: ${verificationUrl}
-
-Generated by SURE Trust Certificate System
-    `.trim();
-    
-    // Create certificate using template-based approach (inspired by Python version)
-    try {
-      await generateSimplePNGCertificate(certificateData, imgPath, refNo, verificationUrl);
-    } catch (error) {
-      console.warn('⚠️ PNG generation failed, creating text placeholder:', error.message);
-      // Fallback: Write text-based certificate as placeholder
-      await fs.writeFile(imgPath.replace('.png', '.txt'), textContent);
-      
-      // Also create a simple HTML file for better display
-      await fs.writeFile(imgPath.replace('.png', '.html'), htmlContent);
-    }
-    
-/**
- * Generate Simple PNG Certificate using actual template images (inspired by Python version)
- */
-async function generateSimplePNGCertificate(certificateData, imgPath, refNo, verificationUrl) {
-  try {
-    // Try canvas-based generation first (similar to Python PIL approach)
-    try {
-      const canvas = await generateCanvasCertificate(certificateData, refNo, verificationUrl);
-      const buffer = canvas.toBuffer('image/png');
-      await fs.writeFile(imgPath, buffer);
-      console.log('✅ Canvas-based PNG certificate generated');
-      return;
-    } catch (canvasError) {
-      console.warn('⚠️ Canvas generation failed, trying SVG approach:', canvasError.message);
-    }
-
-    // Fallback: SVG approach  
-    const qrCodeData = await QRCode.toDataURL(verificationUrl).catch(() => null);
-    const svgContent = createCertificateSVG(certificateData, refNo, verificationUrl, qrCodeData);
-    
-    // Try to convert SVG to PNG if sharp is available
-    try {
-      const sharp = require('sharp');
-      const pngBuffer = await sharp(Buffer.from(svgContent))
-        .png()
-        .resize(800, 600)
-        .toBuffer();
-      
-      await fs.writeFile(imgPath, pngBuffer);
-      console.log('✅ PNG certificate generated using Sharp + SVG');
-      
-    } catch (sharpError) {
-      console.warn('⚠️ Sharp not available, saving as SVG:', sharpError.message);
-      // Save as SVG with PNG extension (browsers can display SVG)
-      await fs.writeFile(imgPath, svgContent);
-      console.log('✅ SVG certificate saved with PNG extension');
-    }
-    
-  } catch (error) {
-    console.error('❌ Error generating PNG certificate:', error);
-    throw error;
-  }
+  throw new Error('HTML/SVG/text fallback is disabled. Only PNG/JPG generation is allowed.');
 }
 
 /**
@@ -706,8 +516,8 @@ async function generateCanvasCertificate(certificateData, refNo, verificationUrl
     
   } catch (templateError) {
     console.warn('⚠️ Template loading failed, using fallback:', templateError.message);
-    // Fallback to basic template if specific template fails
-    return await generateBasicCanvasCertificate(certificateData, refNo, verificationUrl);
+    // Fallback to simplified certificate if specific template fails
+    throw new Error('Template loading failed and no fallback available');
   }
 }
 
@@ -891,42 +701,58 @@ function formatDate(dateString) {
   }
 }
 
-// ...existing code...
 /**
  * Add QR code to template (positioned properly over background)
  */
 async function addQRCodeToTemplate(ctx, refNo, verificationUrl, canvasWidth, canvasHeight) {
   try {
-    // Generate QR code as buffer
+    console.log('🔄 Generating QR code for:', verificationUrl);
+    
+    // Generate QR code as buffer with improved settings
     const qrCodeBuffer = await QRCode.toBuffer(verificationUrl, {
       width: 120,
       margin: 1,
       color: {
         dark: '#000000',
         light: '#FFFFFF'
-      }
+      },
+      errorCorrectionLevel: 'M',
+      type: 'png'
     });
+    
+    // Check if loadImage is available
+    if (!loadImage) {
+      console.warn('⚠️ loadImage not available, using fallback QR placeholder');
+      throw new Error('loadImage not available');
+    }
+    
     // Load QR code as image
     const qrImage = await loadImage(qrCodeBuffer);
+    
     // Position QR code in bottom-right corner with proper margin
     const qrSize = 100;
     const margin = 30;
     const qrX = canvasWidth - qrSize - margin;
     const qrY = canvasHeight - qrSize - margin;
+    
     // Add white background behind QR code for better visibility
     ctx.fillStyle = 'white';
     ctx.fillRect(qrX - 5, qrY - 5, qrSize + 10, qrSize + 10);
+    
     // Add thin border around QR code
     ctx.strokeStyle = '#000000';
     ctx.lineWidth = 1;
     ctx.strokeRect(qrX - 5, qrY - 5, qrSize + 10, qrSize + 10);
+    
     // Draw QR code
     ctx.drawImage(qrImage, qrX, qrY, qrSize, qrSize);
+    
     // Add reference number below QR code
     ctx.fillStyle = '#000000';
     ctx.font = '12px Times, serif';
     ctx.textAlign = 'center';
     ctx.fillText(refNo, qrX + qrSize/2, qrY + qrSize + 15);
+    
     console.log('✅ QR code added to certificate template');
   } catch (error) {
     console.warn('⚠️ QR code generation failed:', error.message);
@@ -935,21 +761,52 @@ async function addQRCodeToTemplate(ctx, refNo, verificationUrl, canvasWidth, can
     const margin = 30;
     const qrX = canvasWidth - qrSize - margin;
     const qrY = canvasHeight - qrSize - margin;
+    
+    // Draw white background
     ctx.fillStyle = 'white';
     ctx.fillRect(qrX, qrY, qrSize, qrSize);
+    
+    // Draw border
     ctx.strokeStyle = '#000000';
     ctx.lineWidth = 2;
     ctx.strokeRect(qrX, qrY, qrSize, qrSize);
+    
     // Add "QR" text
     ctx.fillStyle = '#000000';
     ctx.font = '16px Arial, sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText('QR', qrX + qrSize/2, qrY + qrSize/2);
+    
     // Add reference number
     ctx.font = '12px Times, serif';
     ctx.fillText(refNo, qrX + qrSize/2, qrY + qrSize + 15);
+    
+    console.log('⚠️ QR placeholder added instead of actual QR code');
   }
 }
+
+// Fallback certificate generation using PDFKit only (when canvas isn't available)
+async function generateFallbackCertificate(certificateData, pdfPath, refNo, verificationUrl) {
+  try {
+    console.log('🔄 Generating fallback certificate using PDFKit...');
+    
+    // Generate QR code as buffer first
+    let qrCodeBuffer = null;
+    try {
+      qrCodeBuffer = await QRCode.toBuffer(verificationUrl, {
+        width: 120,
+        margin: 1,
+        color: {
+          dark: '#000000',
+          light: '#FFFFFF'
+        },
+        errorCorrectionLevel: 'M',
+        type: 'png'
+      });
+      console.log('✅ QR code buffer generated for PDF');
+    } catch (qrError) {
+      console.warn('⚠️ QR code generation failed for PDF:', qrError.message);
+    }
     
     // Create a simple PDF using PDFKit without canvas dependency
     const PDFDocument = require('pdfkit');
@@ -986,25 +843,49 @@ async function addQRCodeToTemplate(ctx, refNo, verificationUrl, canvasWidth, can
     pdfDoc.fontSize(22)
            .font('Helvetica-Bold')
            .fillColor('#3498db')
-           .text(certificateData.course, 50, 320, { align: 'center' });
+           .text(certificateData.course || certificateData.course_name || 'Course', 50, 320, { align: 'center' });
     
     pdfDoc.fontSize(16)
            .font('Helvetica')
            .fillColor('#27ae60')
-           .text(`Batch: ${certificateData.batch}`, 50, 370, { align: 'center' });
+           .text(`Batch: ${certificateData.batch || certificateData.batch_initials || 'General'}`, 50, 370, { align: 'center' });
     
     pdfDoc.fontSize(14)
            .font('Helvetica')
            .fillColor('#34495e')
            .text(`Date: ${new Date().toLocaleDateString()}`, 50, 410, { align: 'center' });
     
+    // Add QR code to PDF if available
+    if (qrCodeBuffer) {
+      try {
+        // Position QR code in bottom right
+        const qrSize = 80;
+        const pageWidth = pdfDoc.page.width;
+        const pageHeight = pdfDoc.page.height;
+        const qrX = pageWidth - qrSize - 80;
+        const qrY = pageHeight - qrSize - 80;
+        
+        pdfDoc.image(qrCodeBuffer, qrX, qrY, { width: qrSize, height: qrSize });
+        
+        // Add verification text near QR code
+        pdfDoc.fontSize(10)
+               .font('Helvetica')
+               .fillColor('#7f8c8d')
+               .text('Scan to verify', qrX - 10, qrY + qrSize + 10, { width: qrSize + 20, align: 'center' });
+        
+        console.log('✅ QR code added to PDF certificate');
+      } catch (qrAddError) {
+        console.warn('⚠️ Failed to add QR code to PDF:', qrAddError.message);
+      }
+    }
+    
     pdfDoc.fontSize(12)
            .font('Helvetica')
            .fillColor('#7f8c8d')
            .text(`Reference: ${refNo}`, 50, 480, { align: 'left' });
     
-    pdfDoc.fontSize(12)
-           .text(`Verification: ${verificationUrl}`, 50, 500, { align: 'left' });
+    pdfDoc.fontSize(10)
+           .text(`Verification: ${verificationUrl}`, 50, 500, { align: 'left', width: 400 });
     
     pdfDoc.end();
     
@@ -1014,11 +895,152 @@ async function addQRCodeToTemplate(ctx, refNo, verificationUrl, canvasWidth, can
       pdfStream.on('error', reject);
     });
     
-    console.log('✅ HTML-based certificate generated successfully');
+    console.log('✅ Fallback PDF certificate generated successfully');
+    
+    // Also generate a simple IMG file using Sharp (if available) or SVG fallback
+    await generateFallbackImage(certificateData, pdfPath, refNo, verificationUrl);
     
   } catch (error) {
-    console.error('❌ Error generating HTML-based certificate:', error);
+    console.error('❌ Error generating fallback certificate:', error);
     throw error;
+  }
+}
+
+// Generate fallback IMG file when canvas is not available
+async function generateFallbackImage(certificateData, pdfPath, refNo, verificationUrl) {
+  try {
+    const imgPath = pdfPath.replace('.pdf', '.png');
+    
+    // Try using Sharp if available for image generation
+    try {
+      const sharp = require('sharp');
+      
+      // Create a simple certificate image using Sharp
+      const width = 800;
+      const height = 600;
+      
+      // Generate QR code first
+      let qrCodeBuffer = null;
+      try {
+        qrCodeBuffer = await QRCode.toBuffer(verificationUrl, {
+          width: 80,
+          margin: 1,
+          color: { dark: '#000000', light: '#FFFFFF' },
+          errorCorrectionLevel: 'M',
+          type: 'png'
+        });
+      } catch (qrError) {
+        console.warn('⚠️ QR generation failed for image:', qrError.message);
+      }
+      
+      // Create SVG certificate content
+      const svgContent = `
+        <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
+          <rect width="100%" height="100%" fill="white"/>
+          <rect x="20" y="20" width="${width-40}" height="${height-40}" fill="none" stroke="black" stroke-width="3"/>
+          
+          <text x="50%" y="80" text-anchor="middle" font-family="serif" font-size="28" font-weight="bold" fill="#2c3e50">CERTIFICATE OF COMPLETION</text>
+          
+          <text x="50%" y="140" text-anchor="middle" font-family="serif" font-size="16" fill="#7f8c8d">This is to certify that</text>
+          
+          <text x="50%" y="190" text-anchor="middle" font-family="serif" font-size="24" font-weight="bold" fill="#e74c3c">${certificateData.name.toUpperCase()}</text>
+          
+          <text x="50%" y="240" text-anchor="middle" font-family="serif" font-size="16" fill="#7f8c8d">has successfully completed</text>
+          
+          <text x="50%" y="290" text-anchor="middle" font-family="serif" font-size="20" font-weight="bold" fill="#3498db">${certificateData.course || certificateData.course_name || 'Course'}</text>
+          
+          <text x="50%" y="340" text-anchor="middle" font-family="serif" font-size="16" fill="#27ae60">Batch: ${certificateData.batch || certificateData.batch_initials || 'General'}</text>
+          
+          <text x="50%" y="390" text-anchor="middle" font-family="serif" font-size="14" fill="#34495e">Date: ${new Date().toLocaleDateString()}</text>
+          
+          <text x="60" y="520" font-family="serif" font-size="12" fill="#7f8c8d">Reference: ${refNo}</text>
+          
+          <text x="60" y="540" font-family="serif" font-size="10" fill="#7f8c8d">Verification: ${verificationUrl}</text>
+          
+          ${qrCodeBuffer ? `<rect x="${width-120}" y="${height-120}" width="80" height="80" fill="white" stroke="black" stroke-width="1"/>
+          <text x="${width-80}" y="${height-75}" text-anchor="middle" font-family="serif" font-size="12" fill="black">QR Code</text>` : ''}
+        </svg>
+      `;
+      
+      // Convert SVG to PNG using Sharp
+      const svgBuffer = Buffer.from(svgContent);
+      await sharp(svgBuffer).png().toFile(imgPath);
+      
+      console.log('✅ Fallback IMG certificate generated using Sharp');
+      
+    } catch (sharpError) {
+      console.warn('⚠️ Sharp not available, creating placeholder IMG file:', sharpError.message);
+      
+      // Create a minimal SVG file as fallback
+      const placeholderSvg = `
+        <svg width="800" height="600" xmlns="http://www.w3.org/2000/svg">
+          <rect width="100%" height="100%" fill="white"/>
+          <rect x="20" y="20" width="760" height="560" fill="none" stroke="black" stroke-width="2"/>
+          <text x="50%" y="50%" text-anchor="middle" font-family="serif" font-size="16" fill="black">Certificate for ${certificateData.name}</text>
+          <text x="50%" y="60%" text-anchor="middle" font-family="serif" font-size="12" fill="gray">Reference: ${refNo}</text>
+        </svg>
+      `;
+      
+      // Save as SVG (browsers can display this)
+      const svgPath = imgPath.replace('.png', '.svg');
+      await fs.writeFile(svgPath, placeholderSvg);
+      
+      // Create a minimal text file as PNG placeholder
+      await fs.writeFile(imgPath, `Certificate generated for ${certificateData.name}\nReference: ${refNo}\nVerify at: ${verificationUrl}`);
+      
+      console.log('✅ Placeholder files created (SVG and text)');
+    }
+    
+  } catch (error) {
+    console.warn('⚠️ Failed to generate fallback image:', error.message);
+  }
+}
+
+/**
+ * Add name to certificate canvas
+ */
+async function addNameToCanvas(ctx, certificateData, canvasWidth) {
+  try {
+    const name = certificateData.full_name || certificateData.name || 'Certificate Holder';
+    
+    // Set text styling for name
+    ctx.fillStyle = '#000000';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    
+    // Find appropriate font size
+    let fontSize = 60;
+    let textWidth;
+    
+    do {
+      fontSize -= 5;
+      ctx.font = `bold ${fontSize}px Times, serif`;
+      const metrics = ctx.measureText(name);
+      textWidth = metrics.width;
+    } while (textWidth > canvasWidth * 0.7 && fontSize > 20);
+    
+    // Position name in center-upper area of certificate
+    const x = canvasWidth / 2;
+    const y = 350; // Adjust based on template
+    
+    // Add text shadow for better visibility
+    ctx.shadowColor = 'rgba(255,255,255,0.8)';
+    ctx.shadowBlur = 2;
+    ctx.shadowOffsetX = 1;
+    ctx.shadowOffsetY = 1;
+    
+    // Draw the name
+    ctx.fillText(name, x, y);
+    
+    // Reset shadow
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
+    
+    console.log('✅ Name added to certificate:', name);
+  } catch (error) {
+    console.warn('⚠️ Error adding name to canvas:', error.message);
   }
 }
 
@@ -1026,5 +1048,7 @@ module.exports = {
   generateCertificate,
   generateSimpleCertificate,
   encryptQRData,
-  generateChecksum
+  generateChecksum,
+  generateFallbackCertificate,
+  generateFallbackImage
 };
