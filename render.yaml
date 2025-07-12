@@ -8,16 +8,14 @@ services:
     env: node
     plan: free
     buildCommand: echo "Directory structure check..." && pwd && ls -la && echo "Installing root dependencies..." && npm install && echo "Installing frontend dependencies..." && cd Frontend/React && npm install && npm run build && echo "Build completed!"
-    startCommand: cd Backend && npm start
+    startCommand: npm start
     envVars:
       - key: NODE_ENV
         value: production
       - key: PORT
         value: 10000
       - key: DATABASE_URL
-        fromDatabase:
-          name: certificate-db
-          property: connectionString
+        value: postgresql://certificate_db_44nb_user:bjfK6mi1OXHXE0tYBw8YjtzrWOHX6EhM@dpg-d1p19f7fte5s73br93k0-a.oregon-postgres.render.com/certificate_db_44nb
       - key: FRONTEND_URL
         value: https://certificate-automation-dmoe.onrender.com
       - key: VERIFICATION_BASE_URL
