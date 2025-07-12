@@ -500,7 +500,10 @@ async function generateHTMLCertificate(certificateData, imgPath, pdfPath, refNo,
         
         <div class="footer">
             <div class="ref-no">Reference: ${refNo}</div>
-            <div class="qr-placeholder">QR Code<br/>Verify</div>
+            <div class="qr-code">
+                <img src="${qrCodeData}" alt="QR Code for Certificate Verification" style="width: 80px; height: 80px; border: 2px solid #bdc3c7; border-radius: 5px;"/>
+                <div style="font-size: 10px; color: #7f8c8d; text-align: center; margin-top: 5px;">Scan to Verify</div>
+            </div>
         </div>
     </div>
 </body>
@@ -555,8 +558,9 @@ async function generateSimplePNGCertificate(certificateData, imgPath, refNo, ver
       console.warn('⚠️ Canvas generation failed, trying SVG approach:', canvasError.message);
     }
 
-    // Fallback: SVG approach
-    const svgContent = createCertificateSVG(certificateData, refNo, verificationUrl);
+    // Fallback: SVG approach  
+    const qrCodeData = await QRCode.toDataURL(verificationUrl).catch(() => null);
+    const svgContent = createCertificateSVG(certificateData, refNo, verificationUrl, qrCodeData);
     
     // Try to convert SVG to PNG if sharp is available
     try {
@@ -724,7 +728,7 @@ async function insertContentOnCanvas(ctx, certificateData, canvasWidth) {
 /**
  * Create SVG certificate (fallback method)
  */
-function createCertificateSVG(certificateData, refNo, verificationUrl) {
+function createCertificateSVG(certificateData, refNo, verificationUrl, qrCodeData = null) {
   return `
 <svg width="800" height="600" xmlns="http://www.w3.org/2000/svg">
   <defs>
@@ -776,10 +780,14 @@ function createCertificateSVG(certificateData, refNo, verificationUrl) {
   <text x="70" y="530" font-family="Georgia, serif" font-size="12" fill="#7f8c8d">Reference: ${refNo}</text>
   
   <!-- QR Code area -->
-  <rect x="680" y="460" width="80" height="80" fill="#f8f9fa" stroke="#bdc3c7" stroke-width="2" rx="5"/>
-  <text x="720" y="490" font-family="Arial, sans-serif" font-size="8" text-anchor="middle" fill="#7f8c8d">QR Code</text>
-  <text x="720" y="505" font-family="Arial, sans-serif" font-size="8" text-anchor="middle" fill="#7f8c8d">Scan to</text>
-  <text x="720" y="520" font-family="Arial, sans-serif" font-size="8" text-anchor="middle" fill="#7f8c8d">Verify</text>
+  ${qrCodeData ? 
+    `<image x="680" y="460" width="80" height="80" href="${qrCodeData}" style="border: 2px solid #bdc3c7; border-radius: 5px;"/>
+     <text x="720" y="555" font-family="Arial, sans-serif" font-size="8" text-anchor="middle" fill="#7f8c8d">Scan to Verify</text>` :
+    `<rect x="680" y="460" width="80" height="80" fill="#f8f9fa" stroke="#bdc3c7" stroke-width="2" rx="5"/>
+     <text x="720" y="490" font-family="Arial, sans-serif" font-size="8" text-anchor="middle" fill="#7f8c8d">QR Code</text>
+     <text x="720" y="505" font-family="Arial, sans-serif" font-size="8" text-anchor="middle" fill="#7f8c8d">Scan to</text>
+     <text x="720" y="520" font-family="Arial, sans-serif" font-size="8" text-anchor="middle" fill="#7f8c8d">Verify</text>`
+  }
   
   <!-- Footer -->
   <text x="400" y="510" font-family="Georgia, serif" font-size="12" text-anchor="middle" fill="#95a5a6">SURE Trust Certificate System</text>
