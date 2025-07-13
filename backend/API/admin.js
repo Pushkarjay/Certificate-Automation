@@ -595,4 +595,44 @@ router.post('/sync-current-forms', async (req, res) => {
   }
 });
 
+// Test endpoint for Google Sheets API connectivity
+router.get('/test-google-sheets', async (req, res) => {
+  try {
+    console.log('🧪 Testing Google Sheets API connection...');
+    
+    const googleSheetsService = require('../services/googleSheetsService');
+    
+    // Test basic connection
+    await googleSheetsService.initialize();
+    console.log('✅ Google Sheets service initialized');
+    
+    // Test fetching a small amount of data
+    const testData = await googleSheetsService.fetchFormData(
+      '1zzdRjH24Utl5AWQk6SXOcJ9DnHw4H2hWg3SApHWLUPU', 
+      'Form Responses 1!A1:Z5' // Only first 5 rows for testing
+    );
+    
+    res.json({
+      success: true,
+      message: 'Google Sheets API connection successful',
+      dataCount: testData.length,
+      sampleHeaders: testData.length > 0 ? Object.keys(testData[0]) : [],
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('❌ Google Sheets test failed:', error.message);
+    
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      details: {
+        status: error.status || error.code,
+        message: error.message
+      },
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
 module.exports = router;

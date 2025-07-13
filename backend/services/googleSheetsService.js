@@ -13,12 +13,15 @@ class GoogleSheetsService {
     try {
       const credentials = getGoogleCredentials();
       
-      // Create JWT auth
+      // Create JWT auth with broader scopes
       const auth = new google.auth.JWT(
         credentials.client_email,
         null,
         credentials.private_key,
-        ['https://www.googleapis.com/auth/spreadsheets.readonly']
+        [
+          'https://www.googleapis.com/auth/spreadsheets.readonly',
+          'https://www.googleapis.com/auth/drive.readonly'
+        ]
       );
 
       // Initialize the Sheets API
@@ -75,11 +78,24 @@ class GoogleSheetsService {
       return formData;
 
     } catch (error) {
-      console.error('❌ Error fetching Google Sheets data:', error);
+      console.error('❌ Error fetching Google Sheets data:', error.message);
+      console.error('📝 Error details:', {
+        status: error.status || error.code,
+        message: error.message,
+        spreadsheetId,
+        range
+      });
       
-      if (error.message.includes('The caller does not have permission')) {
+      if (error.status === 403 || error.code === 403) {
+        console.error('🔐 PERMISSION DENIED - Service account lacks access to the Google Sheet');
+        console.error('📝 Solution: Share the Google Sheet with: sure-trust@opportune-sylph-458214-b8.iam.gserviceaccount.com');
+        console.error('📝 Required permission: At least "Viewer" access');
+      } else if (error.status === 404 || error.code === 404) {
+        console.error('📄 SHEET NOT FOUND - Check the spreadsheet ID');
+        console.error('📝 Current ID:', spreadsheetId);
+      } else if (error.message.includes('The caller does not have permission')) {
         console.error('📝 Make sure the service account has access to the Google Sheet');
-        console.error('📝 Share the sheet with: ' + (getGoogleCredentials().client_email || 'service account email'));
+        console.error('📝 Share the sheet with: sure-trust@opportune-sylph-458214-b8.iam.gserviceaccount.com');
       }
       
       throw error;
