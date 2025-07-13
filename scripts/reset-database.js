@@ -5,7 +5,7 @@
  * Completely clears all data and adds one sample test user
  */
 
-const dbService = require('../backend/services/databaseService');
+const dbService = require('../Backend/services/databaseService');
 
 async function resetDatabaseWithSample() {
     try {

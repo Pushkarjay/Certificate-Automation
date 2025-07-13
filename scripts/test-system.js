@@ -70,7 +70,7 @@ async function testCertificateGenerator() {
   console.log('\n🔄 Testing Certificate Generator...');
   
   try {
-    const { generateSimpleCertificate } = require('../backend/services/certificateGenerator');
+    const { generateSimpleCertificate } = require('../Backend/services/certificateGenerator');
     
     const testData = {
       name: 'John Doe',
@@ -106,7 +106,7 @@ async function testDatabaseConnection() {
   console.log('\n🔄 Testing Database Connection...');
   
   try {
-    const dbService = require('../backend/services/databaseService');
+    const dbService = require('../Backend/services/databaseService');
     
     // Test query
     const testQuery = 'SELECT 1 as test_value';
