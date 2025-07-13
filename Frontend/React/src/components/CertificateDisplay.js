@@ -209,10 +209,17 @@ function CertificateDisplay({ certificateData, onClose }) {
       
     } catch (err) {
       console.error('Failed to load certificate:', err);
-      setError('Failed to load certificate');
       
-      // Create a mock certificate display as fallback
-      createMockCertificate();
+      // Try direct URL as fallback for production
+      if (!window.location.hostname.includes('localhost')) {
+        const directUrl = `https://certificate-automation-dmoe.onrender.com/api/certificate-files/${certificateData.referenceNumber}/pdf`;
+        setCertificateImage(directUrl);
+        setError(`Using direct URL fallback: ${err.message}`);
+      } else {
+        setError(`Failed to load certificate: ${err.message}`);
+        // Create a mock certificate display as fallback
+        createMockCertificate();
+      }
     } finally {
       setLoading(false);
     }

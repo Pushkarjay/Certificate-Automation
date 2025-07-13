@@ -35,15 +35,25 @@ app.use(helmet({
       ],
       connectSrc: [
         "'self'",
-        "https://certificate-automation-dmoe.onrender.com"
+        "https://certificate-automation-dmoe.onrender.com",
+        "blob:" // Allow blob URLs for certificates
       ],
       fontSrc: [
         "'self'",
         "data:"
       ],
-      objectSrc: ["'none'"],
-      mediaSrc: ["'self'"],
-      frameSrc: ["'none'"]
+      objectSrc: [
+        "'self'",
+        "blob:" // Allow blob objects for PDF display
+      ],
+      mediaSrc: [
+        "'self'",
+        "blob:" // Allow blob media for certificates
+      ],
+      frameSrc: [
+        "'self'",
+        "blob:" // Allow blob frames for PDF preview
+      ]
     }
   },
   crossOriginEmbedderPolicy: false // Disable COEP to avoid issues with blob URLs

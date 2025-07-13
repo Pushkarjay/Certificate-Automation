@@ -4,7 +4,9 @@ import axios from 'axios';
 const API_BASE_URL = process.env.REACT_APP_API_URL || (
   window.location.hostname === 'localhost' 
     ? 'http://localhost:3000/api' 
-    : `${window.location.origin}/api`
+    : window.location.hostname.includes('certificate-automation-dmoe.onrender.com')
+      ? 'https://certificate-automation-dmoe.onrender.com/api'
+      : `${window.location.origin}/api`
 );
 
 const api = axios.create({
@@ -70,11 +72,37 @@ export const certificateAPI = {
   getCertificateFile: async (refNo) => {
     try {
       const response = await api.get(`/certificate-files/${refNo}/pdf`, {
-        responseType: 'blob'
+        responseType: 'blob',
+        timeout: 30000, // 30 seconds timeout
+        headers: {
+          'Accept': 'application/pdf'
+        }
       });
+      
       return response.data;
     } catch (error) {
       console.error(`Failed to get certificate PDF ${refNo}:`, error.message);
+      
+      // If the main endpoint fails, try the direct production URL as fallback
+      if (!window.location.hostname.includes('localhost')) {
+        try {
+          const fallbackUrl = `https://certificate-automation-dmoe.onrender.com/api/certificate-files/${refNo}/pdf`;
+          
+          const fallbackResponse = await axios.get(fallbackUrl, {
+            responseType: 'blob',
+            timeout: 30000,
+            headers: {
+              'Accept': 'application/pdf'
+            }
+          });
+          
+          console.log(`Certificate PDF received via fallback URL`);
+          return fallbackResponse.data;
+        } catch (fallbackError) {
+          console.error(`Fallback request also failed:`, fallbackError.message);
+        }
+      }
+      
       throw error;
     }
   },
