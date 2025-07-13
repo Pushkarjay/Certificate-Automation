@@ -151,17 +151,6 @@ app.get('/certificates/pdf/:refNo.pdf', (req, res) => {
   res.redirect(`/api/certificate-files/${req.params.refNo}/pdf`);
 });
 
-app.get('/certificates/img/:refNo.:ext(png|jpg|jpeg)', (req, res) => {
-  res.redirect(`/api/certificate-files/${req.params.refNo}/img`);
-});
-
-// Fallback for any other certificate image requests
-app.use('/certificates/img', (req, res) => {
-  const filename = path.basename(req.path, path.extname(req.path));
-  const refNo = filename.replace(/^.*?([A-Z0-9_]+)$/, '$1');
-  res.redirect(`/api/certificate-files/${refNo}/img`);
-});
-
 // Legacy static file serving (fallback for existing files)
 app.use('/certificates/pdf', express.static(path.join(__dirname, 'Generated-Certificates/PDF')));
 

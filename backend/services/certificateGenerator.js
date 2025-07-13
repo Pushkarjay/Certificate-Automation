@@ -79,7 +79,7 @@ async function generateComplexCertificate(certificateData, certificateType) {
 async function generateCertificate(certificateData) {
   try {
     // Try production-optimized generation first (best for Render deployment)
-    const { generateProductionCertificate } = require('./productionCertificateGenerator');
+    const { generateProductionCertificate } = require('./simplifiedProductionCertificateGenerator');
     console.log('🚀 Using production-optimized certificate generation...');
     return await generateProductionCertificate(certificateData);
   } catch (productionError) {

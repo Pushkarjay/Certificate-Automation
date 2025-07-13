@@ -1,4 +1,4 @@
-const productionGenerator = require('./services/productionCertificateGenerator');
+const productionGenerator = require('./services/simplifiedProductionCertificateGenerator');
 const dbService = require('./services/databaseService');
 
 /**
