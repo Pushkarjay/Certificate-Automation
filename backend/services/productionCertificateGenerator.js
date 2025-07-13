@@ -1,6 +1,6 @@
 /**
  * Production-Ready Certificate Generator for Render Deployment
- * Optimized for cloud environments with proper Canvas/Sharp handling
+ * PDF-only generation for simplified and reliable certificate creation
  */
 
 const PDFDocument = require('pdfkit');
@@ -8,21 +8,6 @@ const path = require('path');
 const fs = require('fs').promises;
 const QRCode = require('qrcode');
 const certificateStorage = require('./certificateStorageService');
-
-// Enhanced Canvas loading with Render cloud environment support
-let createCanvas, loadImage, registerFont;
-let canvasAvailable = false;
-
-try {
-  const canvas = require('canvas');
-  createCanvas = canvas.createCanvas;
-  loadImage = canvas.loadImage;
-  registerFont = canvas.registerFont;
-  canvasAvailable = true;
-  
-  console.log('✅ Canvas module loaded successfully for cloud deployment');
-  
-  // Register fonts with error handling for cloud environments
   try {
     const fontsDir = path.join(__dirname, '../Certificate_Templates/fonts');
     registerFont(path.join(fontsDir, 'times.ttf'), { family: 'Times' });
@@ -67,12 +52,11 @@ async function generateProductionCertificate(certificateData) {
       verificationUrl
     );
     
-    // Store certificate files in database
-    console.log('💾 Storing certificate files in database...');
+    // Store certificate PDF in database
+    console.log('💾 Storing certificate PDF in database...');
     const storageSuccess = await certificateStorage.storeCertificateFromFiles(
       refNo,
-      result.pdfPath ? path.join(__dirname, '..', result.pdfPath) : null,
-      result.imagePath ? path.join(__dirname, '..', result.imagePath) : null
+      result.pdfPath ? path.join(__dirname, '..', result.pdfPath) : null
     );
     
     if (storageSuccess) {
@@ -228,24 +212,16 @@ async function generateCertificateWithTemplate(data, templateInfo, refNo, verifi
     console.warn('⚠️ Template not found:', templateInfo.filename);
   }
   
-  // Generate filenames
+  // Generate filename for PDF only
   const baseFilename = `${refNo.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
   const pdfPath = path.join(__dirname, '../Generated-Certificates/PDF', `${baseFilename}.pdf`);
-  const imgPath = path.join(__dirname, '../Generated-Certificates/IMG', `${baseFilename}.png`);
   
-  // Generate certificate
-  if (canvasAvailable && templateExists) {
-    // Use Canvas for high-quality generation
-    await generateCanvasBasedCertificate(data, templateInfo, refNo, verificationUrl, pdfPath, imgPath);
-  } else {
-    // Use PDFKit-only generation
-    await generatePDFOnlyCertificate(data, templateInfo, refNo, verificationUrl, pdfPath, templateExists);
-  }
+  // Generate PDF certificate only
+  await generatePDFOnlyCertificate(data, templateInfo, refNo, verificationUrl, pdfPath, templateExists);
   
   return {
     success: true,
     pdfPath: `Generated-Certificates/PDF/${baseFilename}.pdf`,
-    imagePath: `Generated-Certificates/IMG/${baseFilename}.png`,
     certificateData: {
       referenceNumber: refNo,
       holderName: data.name,
@@ -255,7 +231,7 @@ async function generateCertificateWithTemplate(data, templateInfo, refNo, verifi
       template: templateInfo.filename,
       templateExists: templateExists,
       issuedDate: new Date().toISOString(),
-      generationMethod: canvasAvailable ? 'canvas' : 'pdfkit'
+      generationMethod: 'pdfkit'
     }
   };
 }

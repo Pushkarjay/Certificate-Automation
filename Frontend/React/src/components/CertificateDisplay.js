@@ -83,10 +83,10 @@ const CertificateContainer = styled.div`
   min-height: 400px;
 `;
 
-const CertificateImage = styled.img`
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
+const CertificatePreview = styled.iframe`
+  width: 100%;
+  height: 600px;
+  border: none;
   border-radius: 8px;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
 `;
@@ -197,12 +197,15 @@ function CertificateDisplay({ certificateData, onClose }) {
       setLoading(true);
       setError(null);
       
-      // Load PDF and convert to blob URL for preview
+      // Load PDF for preview
       const blob = await certificateAPI.getCertificateFile(
         certificateData.referenceNumber
       );
-      const imageUrl = URL.createObjectURL(blob);
-      setCertificateImage(imageUrl);
+      
+      // For PDF preview, we'll create an object URL
+      // Note: Modern browsers can display PDFs directly
+      const pdfUrl = URL.createObjectURL(blob);
+      setCertificateImage(pdfUrl);
       
     } catch (err) {
       console.error('Failed to load certificate:', err);
@@ -335,7 +338,7 @@ function CertificateDisplay({ certificateData, onClose }) {
             {loading && <LoadingSpinner />}
             {error && <ErrorMessage>{error}</ErrorMessage>}
             {certificateImage && (
-              <CertificateImage src={certificateImage} alt="Certificate" />
+              <CertificatePreview src={certificateImage} title="Certificate Preview" />
             )}
           </CertificateContainer>
 
