@@ -8,6 +8,20 @@ const path = require('path');
 const fs = require('fs').promises;
 const QRCode = require('qrcode');
 const certificateStorage = require('./certificateStorageService');
+
+// Environment detection
+let canvasAvailable = false;
+let Canvas, loadImage, registerFont, createCanvas;
+
+// Try to load Canvas for high-quality image generation
+try {
+  const canvas = require('canvas');
+  Canvas = canvas.Canvas;
+  loadImage = canvas.loadImage;
+  registerFont = canvas.registerFont;
+  createCanvas = canvas.createCanvas;
+  canvasAvailable = true;
+  
   try {
     const fontsDir = path.join(__dirname, '../Certificate_Templates/fonts');
     registerFont(path.join(fontsDir, 'times.ttf'), { family: 'Times' });
