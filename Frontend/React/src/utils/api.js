@@ -66,15 +66,15 @@ export const certificateAPI = {
     return response.data;
   },
 
-  // Get certificate file (PDF format)
-  getCertificateFile: async (refNo, format = 'pdf') => {
+  // Get certificate PDF file
+  getCertificateFile: async (refNo) => {
     try {
-      const response = await api.get(`/certificate-files/${refNo}/${format}`, {
+      const response = await api.get(`/certificate-files/${refNo}/pdf`, {
         responseType: 'blob'
       });
       return response.data;
     } catch (error) {
-      console.error(`Failed to get certificate file ${refNo} (${format}):`, error.message);
+      console.error(`Failed to get certificate PDF ${refNo}:`, error.message);
       throw error;
     }
   },

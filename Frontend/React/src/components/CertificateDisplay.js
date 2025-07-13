@@ -197,38 +197,18 @@ function CertificateDisplay({ certificateData, onClose }) {
       setLoading(true);
       setError(null);
       
-      // Try to load PNG image first
-      try {
-        const blob = await certificateAPI.getCertificateFile(
-          certificateData.referenceNumber,
-          'png'
-        );
-        const imageUrl = URL.createObjectURL(blob);
-        setCertificateImage(imageUrl);
-        return;
-      } catch (pngError) {
-        // PNG not available, try SVG
-      }
-      
-      // Fallback to SVG if PNG is not available
-      try {
-        const blob = await certificateAPI.getCertificateFile(
-          certificateData.referenceNumber,
-          'svg'
-        );
-        const imageUrl = URL.createObjectURL(blob);
-        setCertificateImage(imageUrl);
-        return;
-      } catch (svgError) {
-        // SVG not available, create mock certificate
-        throw new Error('No certificate images available');
-      }
+      // Load PDF and convert to blob URL for preview
+      const blob = await certificateAPI.getCertificateFile(
+        certificateData.referenceNumber
+      );
+      const imageUrl = URL.createObjectURL(blob);
+      setCertificateImage(imageUrl);
       
     } catch (err) {
       console.error('Failed to load certificate:', err);
-      setError('Failed to load certificate image');
+      setError('Failed to load certificate');
       
-      // For demo, create a mock certificate display
+      // Create a mock certificate display as fallback
       createMockCertificate();
     } finally {
       setLoading(false);
@@ -295,10 +275,9 @@ function CertificateDisplay({ certificateData, onClose }) {
 
   const handleDownload = async () => {
     try {
-      // Download PDF format for best quality
+      // Download PDF certificate
       const blob = await certificateAPI.getCertificateFile(
-        certificateData.referenceNumber,
-        'pdf'
+        certificateData.referenceNumber
       );
       
       const url = URL.createObjectURL(blob);
@@ -313,17 +292,7 @@ function CertificateDisplay({ certificateData, onClose }) {
       toast.success('Certificate downloaded successfully!');
     } catch (error) {
       console.error('Download failed:', error);
-      
-      // Fallback to current displayed image if PDF download fails
-      if (certificateImage) {
-        const a = document.createElement('a');
-        a.href = certificateImage;
-        a.download = `certificate-${certificateData.referenceNumber}.png`;
-        a.click();
-        toast.success('Certificate downloaded as image!');
-      } else {
-        toast.error('Failed to download certificate. Please try again.');
-      }
+      toast.error('Failed to download certificate. Please try again.');
     }
   };
 

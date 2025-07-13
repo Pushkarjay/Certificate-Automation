@@ -251,8 +251,7 @@ function CertificateVerification() {
     try {
       if (certificateData?.certificateData) {
         const blob = await certificateAPI.getCertificateFile(
-          certificateData.certificateData.referenceNumber,
-          'pdf'
+          certificateData.certificateData.referenceNumber
         );
         
         const url = window.URL.createObjectURL(blob);
