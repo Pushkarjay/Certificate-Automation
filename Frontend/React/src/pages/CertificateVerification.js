@@ -251,20 +251,23 @@ function CertificateVerification() {
     try {
       if (certificateData?.certificateData) {
         const blob = await certificateAPI.getCertificateFile(
-          certificateData.certificateData.certificateType,
-          certificateData.certificateData.certificateId
+          certificateData.certificateData.referenceNumber,
+          'pdf'
         );
         
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `certificate-${certificateData.certificateData.referenceNumber}.png`;
+        a.download = `certificate-${certificateData.certificateData.referenceNumber}.pdf`;
+        document.body.appendChild(a);
         a.click();
+        document.body.removeChild(a);
         window.URL.revokeObjectURL(url);
         
         toast.success('Certificate downloaded successfully!');
       }
     } catch (error) {
+      console.error('Download failed:', error);
       toast.error('Failed to download certificate');
     }
   };

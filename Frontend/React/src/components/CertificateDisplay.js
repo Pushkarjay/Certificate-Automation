@@ -197,15 +197,33 @@ function CertificateDisplay({ certificateData, onClose }) {
       setLoading(true);
       setError(null);
       
-      // For demo purposes, we'll show a placeholder
-      // In production, this would load the actual certificate image
-      const blob = await certificateAPI.getCertificateFile(
-        certificateData.certificateType,
-        certificateData.certificateId
-      );
+      // Try to load PNG image first
+      try {
+        const blob = await certificateAPI.getCertificateFile(
+          certificateData.referenceNumber,
+          'png'
+        );
+        const imageUrl = URL.createObjectURL(blob);
+        setCertificateImage(imageUrl);
+        return;
+      } catch (pngError) {
+        // PNG not available, try SVG
+      }
       
-      const imageUrl = URL.createObjectURL(blob);
-      setCertificateImage(imageUrl);
+      // Fallback to SVG if PNG is not available
+      try {
+        const blob = await certificateAPI.getCertificateFile(
+          certificateData.referenceNumber,
+          'svg'
+        );
+        const imageUrl = URL.createObjectURL(blob);
+        setCertificateImage(imageUrl);
+        return;
+      } catch (svgError) {
+        // SVG not available, create mock certificate
+        throw new Error('No certificate images available');
+      }
+      
     } catch (err) {
       console.error('Failed to load certificate:', err);
       setError('Failed to load certificate image');
@@ -275,13 +293,37 @@ function CertificateDisplay({ certificateData, onClose }) {
     });
   };
 
-  const handleDownload = () => {
-    if (certificateImage) {
+  const handleDownload = async () => {
+    try {
+      // Download PDF format for best quality
+      const blob = await certificateAPI.getCertificateFile(
+        certificateData.referenceNumber,
+        'pdf'
+      );
+      
+      const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = certificateImage;
-      a.download = `certificate-${certificateData.referenceNumber}.png`;
+      a.href = url;
+      a.download = `certificate-${certificateData.referenceNumber}.pdf`;
+      document.body.appendChild(a);
       a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
       toast.success('Certificate downloaded successfully!');
+    } catch (error) {
+      console.error('Download failed:', error);
+      
+      // Fallback to current displayed image if PDF download fails
+      if (certificateImage) {
+        const a = document.createElement('a');
+        a.href = certificateImage;
+        a.download = `certificate-${certificateData.referenceNumber}.png`;
+        a.click();
+        toast.success('Certificate downloaded as image!');
+      } else {
+        toast.error('Failed to download certificate. Please try again.');
+      }
     }
   };
 

@@ -66,12 +66,28 @@ export const certificateAPI = {
     return response.data;
   },
 
-  // Get certificate image/file
-  getCertificateFile: async (type, id) => {
-    const response = await api.get(`/certificates/file/${type}/${id}`, {
-      responseType: 'blob'
-    });
-    return response.data;
+  // Get certificate file (PDF format)
+  getCertificateFile: async (refNo, format = 'pdf') => {
+    try {
+      const response = await api.get(`/certificate-files/${refNo}/${format}`, {
+        responseType: 'blob'
+      });
+      return response.data;
+    } catch (error) {
+      console.error(`Failed to get certificate file ${refNo} (${format}):`, error.message);
+      throw error;
+    }
+  },
+
+  // Get certificate info
+  getCertificateInfo: async (refNo) => {
+    try {
+      const response = await api.get(`/certificate-files/${refNo}/info`);
+      return response.data;
+    } catch (error) {
+      console.error(`Failed to get certificate info ${refNo}:`, error.message);
+      throw error;
+    }
   },
 
   // Manual verification by details
