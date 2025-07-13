@@ -1,5 +1,16 @@
 # Google Forms Setup Guide
 
+## ⚠️ Current Status: Google Forms Sync Issues Identified
+
+**Issues Found:**
+- ❌ Form URLs are still placeholders 
+- ❌ Hardcoded form ID may not exist
+- ❌ Field mapping needs verification
+- ❌ Triggers need proper configuration
+- ✅ Backend API is working correctly (both local and deployed)
+
+**Quick Fix:** See `TROUBLESHOOTING.md` for step-by-step resolution guide.
+
 ## Overview
 This folder contains the Google Apps Script code to integrate Google Forms with your certificate automation system.
 

@@ -7,6 +7,7 @@ const PDFDocument = require('pdfkit');
 const path = require('path');
 const fs = require('fs').promises;
 const QRCode = require('qrcode');
+const certificateStorage = require('./certificateStorageService');
 
 // Enhanced Canvas loading with Render cloud environment support
 let createCanvas, loadImage, registerFont;
@@ -65,6 +66,20 @@ async function generateProductionCertificate(certificateData) {
       refNo, 
       verificationUrl
     );
+    
+    // Store certificate files in database
+    console.log('💾 Storing certificate files in database...');
+    const storageSuccess = await certificateStorage.storeCertificateFromFiles(
+      refNo,
+      result.pdfPath ? path.join(__dirname, '..', result.pdfPath) : null,
+      result.imagePath ? path.join(__dirname, '..', result.imagePath) : null
+    );
+    
+    if (storageSuccess) {
+      console.log('✅ Certificate files stored in database successfully');
+    } else {
+      console.warn('⚠️ Failed to store certificate files in database');
+    }
     
     console.log('✅ Production certificate generated successfully');
     return result;
@@ -574,9 +589,20 @@ async function addFallbackDesignToPDF(doc, templateName) {
  * Add content overlay to PDF
  */
 async function addContentOverlayToPDF(doc, data, refNo, verificationUrl) {
-  // Student name
+  // Student name - Center it properly on the page
   doc.fontSize(28).fillColor('#000000').font('Times-Bold');
-  doc.text(data.name, 421, 240, { align: 'center', width: 700 });
+  
+  // Calculate page center for better alignment
+  const pageWidth = doc.page.width;  // Usually 841.89 for A4 landscape
+  const pageHeight = doc.page.height; // Usually 595.28 for A4 landscape
+  const centerX = pageWidth / 2;
+  
+  // Position student name in the center of the page
+  doc.text(data.name, 50, 240, { 
+    align: 'center', 
+    width: pageWidth - 100, // Full width minus margins
+    characterSpacing: 1
+  });
   
   // Content
   let contentText = '';
@@ -642,11 +668,154 @@ async function addQRCodeToPDF(doc, verificationUrl) {
 
 /**
  * Create placeholder IMG file
+ * When Canvas is not available, create a simple SVG image as placeholder
  */
 async function createPlaceholderIMG(data, refNo, imgPath) {
-  const placeholder = `Certificate Generated\nStudent: ${data.name}\nCourse: ${data.course}\nReference: ${refNo}\nGenerated: ${new Date().toISOString()}`;
-  await fs.writeFile(imgPath, placeholder);
-  console.log('✅ Placeholder IMG created');
+  try {
+    // Create a simple SVG placeholder that browsers can display
+    const svgContent = `
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1122" height="794" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#E3F2FD;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#BBDEFB;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="100%" height="100%" fill="url(#grad1)" stroke="#1976D2" stroke-width="4"/>
+  
+  <!-- Title -->
+  <text x="561" y="120" font-family="Arial, sans-serif" font-size="36" font-weight="bold" text-anchor="middle" fill="#1976D2">
+    CERTIFICATE OF COMPLETION
+  </text>
+  
+  <!-- Subtitle -->
+  <text x="561" y="180" font-family="Arial, sans-serif" font-size="18" text-anchor="middle" fill="#424242">
+    This is to certify that
+  </text>
+  
+  <!-- Student Name -->
+  <text x="561" y="250" font-family="Arial, sans-serif" font-size="28" font-weight="bold" text-anchor="middle" fill="#1565C0">
+    ${data.name || 'Student Name'}
+  </text>
+  
+  <!-- Course Info -->
+  <text x="561" y="320" font-family="Arial, sans-serif" font-size="18" text-anchor="middle" fill="#424242">
+    has successfully completed the course
+  </text>
+  
+  <!-- Course Name -->
+  <text x="561" y="380" font-family="Arial, sans-serif" font-size="24" font-weight="bold" text-anchor="middle" fill="#1565C0">
+    ${data.course || 'Course Name'}
+  </text>
+  
+  <!-- Batch Info -->
+  <text x="561" y="430" font-family="Arial, sans-serif" font-size="16" text-anchor="middle" fill="#424242">
+    Batch: ${data.batch || 'N/A'} | GPA: ${data.gpa || 'N/A'}
+  </text>
+  
+  <!-- Date -->
+  <text x="561" y="480" font-family="Arial, sans-serif" font-size="16" text-anchor="middle" fill="#424242">
+    Completion Date: ${data.endDate ? new Date(data.endDate).toLocaleDateString() : 'N/A'}
+  </text>
+  
+  <!-- Reference -->
+  <text x="561" y="580" font-family="Arial, sans-serif" font-size="14" text-anchor="middle" fill="#666666">
+    Certificate Reference: ${refNo}
+  </text>
+  
+  <!-- Note -->
+  <text x="561" y="620" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#999999">
+    Note: This is a placeholder image. The official certificate is in PDF format.
+  </text>
+  
+  <!-- Footer -->
+  <text x="561" y="720" font-family="Arial, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#1976D2">
+    SURE Trust
+  </text>
+  <text x="561" y="750" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#666666">
+    Skill Upgradation and Redesigning with Employability
+  </text>
+</svg>`.trim();
+
+    // Change extension to .svg for proper MIME type
+    const svgPath = imgPath.replace(/\.(png|jpg|jpeg)$/i, '.svg');
+    await fs.writeFile(svgPath, svgContent);
+    
+    // Also create the original extension file pointing to PDF
+    const redirectContent = `
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Certificate Image</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            text-align: center; 
+            padding: 50px; 
+            background: #f5f5f5; 
+        }
+        .container { 
+            background: white; 
+            padding: 40px; 
+            border-radius: 8px; 
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1); 
+            max-width: 600px; 
+            margin: 0 auto; 
+        }
+        .icon { font-size: 48px; margin-bottom: 20px; }
+        h1 { color: #1976D2; margin-bottom: 20px; }
+        p { color: #666; margin-bottom: 30px; }
+        .btn { 
+            background: #1976D2; 
+            color: white; 
+            padding: 12px 24px; 
+            text-decoration: none; 
+            border-radius: 4px; 
+            display: inline-block; 
+            margin: 0 10px; 
+        }
+        .btn:hover { background: #1565C0; }
+        .info { 
+            background: #f0f8ff; 
+            padding: 20px; 
+            border-radius: 4px; 
+            margin: 20px 0; 
+            border-left: 4px solid #1976D2; 
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="icon">📄</div>
+        <h1>Certificate Available in PDF Format</h1>
+        <p>High-quality certificate images are not available in this environment, but your official certificate is ready as a PDF document.</p>
+        
+        <div class="info">
+            <strong>Certificate Details:</strong><br>
+            Student: ${data.name || 'N/A'}<br>
+            Course: ${data.course || 'N/A'}<br>
+            Reference: ${refNo}<br>
+            Generated: ${new Date().toLocaleString()}
+        </div>
+        
+        <a href="/certificates/pdf/${refNo}.pdf" class="btn" target="_blank">📄 View PDF Certificate</a>
+        <a href="/verify/${refNo}" class="btn" target="_blank">🔍 Verify Certificate</a>
+    </div>
+</body>
+</html>`.trim();
+
+    await fs.writeFile(imgPath, redirectContent);
+    console.log('✅ Placeholder IMG created (SVG + HTML redirect)');
+    
+  } catch (error) {
+    console.warn('⚠️ Could not create placeholder IMG:', error.message);
+    // Fallback to simple text file
+    const simpleText = `Certificate: ${data.name} - ${data.course} (${refNo})`;
+    await fs.writeFile(imgPath, simpleText);
+  }
 }
 
 /**

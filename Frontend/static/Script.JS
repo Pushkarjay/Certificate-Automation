@@ -415,51 +415,44 @@ function closeCertificateModal() {
 }
 
 /**
- * Download certificate (React-style feature added to static)
+ * Download certificate PDF from database
  */
 async function downloadCertificate(referenceNumber) {
     try {
-        showMessage('Preparing download...', 'info');
+        showMessage('Preparing PDF download...', 'info');
         
-        // In a full implementation, this would download the actual certificate file
-        // For now, we'll create a simple text file with certificate info
-        const response = await fetch(`${CONFIG.API_BASE_URL}${CONFIG.VERIFICATION_ENDPOINT}/${referenceNumber}`);
-        const data = await response.json();
+        // Download the actual PDF certificate from our database API
+        const pdfUrl = `${CONFIG.API_BASE_URL}/certificate-files/${referenceNumber}/pdf`;
         
-        if (data.valid && data.certificateData) {
-            const certificateText = `
-SURE Trust Certificate
-======================
-
-Reference Number: ${data.certificateData.referenceNumber}
-Certificate Holder: ${data.certificateData.holderName}
-Email: ${data.certificateData.email}
-Course: ${data.certificateData.course}
-Batch: ${data.certificateData.batch}
-GPA: ${data.certificateData.gpa || 'N/A'}
-Issued Date: ${formatDate(data.certificateData.issuedDate)}
-
-This certificate is valid and authentic.
-Verification URL: ${data.certificateData.verificationUrl || window.location.href}
-
-© 2025 SURE Trust. All rights reserved.
-            `;
-            
-            const blob = new Blob([certificateText], { type: 'text/plain' });
-            const url = window.URL.createObjectURL(blob);
+        // First check if the certificate exists
+        const infoResponse = await fetch(`${CONFIG.API_BASE_URL}/certificate-files/${referenceNumber}/info`);
+        const infoData = await infoResponse.json();
+        
+        if (infoData.files && infoData.files.pdf && infoData.files.pdf.available) {
+            // Create a temporary link to download the PDF
             const a = document.createElement('a');
-            a.href = url;
-            a.download = `certificate-${referenceNumber}.txt`;
+            a.href = pdfUrl;
+            a.download = `${referenceNumber}.pdf`;
+            a.target = '_blank';
+            document.body.appendChild(a);
             a.click();
-            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
             
-            showMessage('Certificate downloaded successfully!', 'success');
+            showMessage('Certificate PDF downloaded successfully!', 'success');
         } else {
-            showMessage('Failed to download certificate', 'error');
+            // If PDF not available, try to verify and show message
+            const verifyResponse = await fetch(`${CONFIG.API_BASE_URL}${CONFIG.VERIFICATION_ENDPOINT}/${referenceNumber}`);
+            const verifyData = await verifyResponse.json();
+            
+            if (verifyData.valid) {
+                showMessage('Certificate verified but PDF file not available. Please contact support.', 'warning');
+            } else {
+                showMessage('Certificate not found or invalid reference number.', 'error');
+            }
         }
     } catch (error) {
         console.error('Download error:', error);
-        showMessage('Failed to download certificate', 'error');
+        showMessage('Failed to download certificate. Please try again.', 'error');
     }
 }
 
@@ -480,6 +473,7 @@ function showMessage(message, type = 'info') {
         animation: slideIn 0.3s ease;
         ${type === 'success' ? 'background: #10b981;' : ''}
         ${type === 'error' ? 'background: #ef4444;' : ''}
+        ${type === 'warning' ? 'background: #f59e0b;' : ''}
         ${type === 'info' ? 'background: #3b82f6;' : ''}
     `;
     

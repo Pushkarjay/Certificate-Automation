@@ -11,11 +11,12 @@
  * 6. Link this script to your Google Form
  */
 
-// Configuration
+// Configuration - Updated with actual Google Form and Sheet IDs
 const CONFIG = {
   API_BASE_URL: 'https://certificate-automation-dmoe.onrender.com/api',
   FORM_SUBMIT_ENDPOINT: '/forms/submit',
   SHEET_ID: '1zzdRjH24Utl5AWQk6SXOcJ9DnHw4H2hWg3SApHWLUPU', // Your Google Sheet ID
+  FORM_ID: '1FAIpQLSev4EyumKjc6p4K4HdOJHwwUUVRm1DQ7Udr8wYZZ5owCU7aw', // Extracted from forms.gle/UygoiVrfaKi3A3z59
   MAX_RETRIES: 3,
   RETRY_DELAY: 1000 // milliseconds
 };
@@ -464,16 +465,18 @@ function createFormTrigger() {
     });
     
     // Create new trigger for the form
-    const form = FormApp.openById('1FAIpQLSfI19mehpVH35xAp5TtnAeFjbow40rN8Fo0-1JSchnJiglgSg'); // Extract from your form URL
+    const form = FormApp.openById(CONFIG.FORM_ID); // Use the correct form ID
     ScriptApp.newTrigger('onFormSubmit')
       .form(form)
       .onFormSubmit()
       .create();
     
     console.log('✅ Form trigger created successfully!');
+    console.log(`📝 Connected to form: "${form.getTitle()}"`);
+    console.log('🌐 Form URL: https://forms.gle/UygoiVrfaKi3A3z59');
     
   } catch (error) {
     console.error('❌ Error creating form trigger:', error);
-    console.log('💡 You may need to create the trigger manually in the Apps Script editor.');
+    console.log('💡 Make sure this script has access to the Google Form.');
   }
 }

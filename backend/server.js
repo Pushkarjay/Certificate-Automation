@@ -107,7 +107,7 @@ const limiter = rateLimit({
 app.use('/api/', limiter);
 
 // Static files - Serve generated certificates
-app.use('/certificates/img', express.static(path.join(__dirname, 'Generated-Certificates/IMG')));
+// Static file serving for certificates
 app.use('/certificates/pdf', express.static(path.join(__dirname, 'Generated-Certificates/PDF')));
 
 // Serve static frontend files (for combined deployment)
@@ -145,11 +145,32 @@ async function testConnection() {
   }
 }
 
+// Database-served certificate files (replaces static file serving)
+// Certificates are now served from PostgreSQL database via API
+app.get('/certificates/pdf/:refNo.pdf', (req, res) => {
+  res.redirect(`/api/certificate-files/${req.params.refNo}/pdf`);
+});
+
+app.get('/certificates/img/:refNo.:ext(png|jpg|jpeg)', (req, res) => {
+  res.redirect(`/api/certificate-files/${req.params.refNo}/img`);
+});
+
+// Fallback for any other certificate image requests
+app.use('/certificates/img', (req, res) => {
+  const filename = path.basename(req.path, path.extname(req.path));
+  const refNo = filename.replace(/^.*?([A-Z0-9_]+)$/, '$1');
+  res.redirect(`/api/certificate-files/${refNo}/img`);
+});
+
+// Legacy static file serving (fallback for existing files)
+app.use('/certificates/pdf', express.static(path.join(__dirname, 'Generated-Certificates/PDF')));
+
 // Routes
 app.use('/api/forms', require('./API/forms'));
 app.use('/api/certificates', require('./API/certificates'));
 app.use('/api/verify', require('./API/verify'));
 app.use('/api/admin', require('./API/admin'));
+app.use('/api/certificate-files', require('./API/certificate-files'));
 
 // Performance monitoring endpoint
 app.get('/api/performance', (req, res) => {

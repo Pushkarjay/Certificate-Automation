@@ -417,8 +417,8 @@
                                                         <a href="${cert.verification_url}" target="_blank" style="color: #28a745; text-decoration: none;">View Certificate</a><br>
                                                         ${cert.certificate_ref_no ? 
                                                             `<div style="margin-top: 5px;">
-                                                                <a href="/certificates/img/${cert.certificate_ref_no}.png" target="_blank" style="color: #007bff; font-size: 0.8em; margin-right: 8px;" class="cert-file-link">IMG</a>
-                                                                <a href="/certificates/pdf/${cert.certificate_ref_no}.pdf" target="_blank" style="color: #dc3545; font-size: 0.8em;" class="cert-file-link">PDF</a>
+                                                                <a href="/api/certificate-files/${cert.certificate_ref_no}/img" target="_blank" style="color: #007bff; font-size: 0.8em; margin-right: 8px;" class="cert-file-link">IMG</a>
+                                                                <a href="/api/certificate-files/${cert.certificate_ref_no}/pdf" target="_blank" style="color: #dc3545; font-size: 0.8em;" class="cert-file-link">PDF</a>
                                                             </div>` : ''
                                                         }
                                                         <small style="color: #666;">Ref: ${cert.certificate_ref_no || 'N/A'}</small><br>
