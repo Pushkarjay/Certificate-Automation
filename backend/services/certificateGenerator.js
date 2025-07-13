@@ -28,48 +28,45 @@ console.log('📦 QRCode library loaded:', typeof QRCode);
 console.log('📦 QRCode methods available:', Object.keys(QRCode));
 
 /**
- * Generate certificate in both IMG and PDF formats based on SRS requirements
+ * Generate certificate with template background in A4 landscape PDF
  */
 async function generateComplexCertificate(certificateData, certificateType) {
   try {
-    // If canvas is not available, use simple certificate generation
-    if (!createCanvas || !loadImage) {
-      console.log('⚠️ Canvas not available, using simple certificate generation');
-      return await generateSimpleCertificate(certificateData);
-    }
+    console.log('🎨 Starting certificate generation...');
     
-    const templatePath = path.join(__dirname, '../Certificate_Templates', certificateData.template_file_path);
-    
-    // Load template image
-    const templateImage = await loadImage(templatePath);
-    
-    // Create canvas with template dimensions
-    const canvas = createCanvas(templateImage.width, templateImage.height);
-    const ctx = canvas.getContext('2d');
-    
-    // Draw template
-    ctx.drawImage(templateImage, 0, 0);
-    
-    // Add name
-    await addNameToCanvas(ctx, certificateData, canvas.width);
-    
-    // Add content text
-    await addContentToCanvas(ctx, certificateData, certificateType, canvas.width);
-    
-    // Generate and add encrypted QR code
-    await addQRCodeToCanvas(ctx, certificateData, canvas.width, canvas.height);
+    // Generate reference number if not provided
+    const refNo = certificateData.reference_number || generateReferenceNumber();
+    const verificationUrl = `${process.env.VERIFICATION_BASE_URL || 'https://certificate-automation-dmoe.onrender.com/verify/'}${refNo}`;
     
     // Generate filenames
-    const baseFilename = generateBaseFilename(certificateData, certificateType);
+    const baseFilename = generateBaseFilename(certificateData, certificateType, refNo);
     
-    // Generate IMG certificate
-    const imgFilename = await generateIMGCertificate(canvas, baseFilename);
+    // Create directories
+    const pdfDir = path.join(__dirname, '../Generated-Certificates/PDF');
+    const imgDir = path.join(__dirname, '../Generated-Certificates/IMG');
+    await ensureDirectoryExists(pdfDir);
+    await ensureDirectoryExists(imgDir);
     
-    // Generate PDF certificate
-    const pdfFilename = await generatePDFCertificate(canvas, baseFilename, certificateData, certificateType);
+    // Generate PDF certificate with template background
+    const pdfFilename = await generatePDFWithTemplate(certificateData, certificateType, refNo, verificationUrl, baseFilename);
     
-    console.log(`✅ Certificate generated: IMG=${imgFilename}, PDF=${pdfFilename}`);
-    return { imgFilename, pdfFilename, referenceNumber: certificateData.reference_number };
+    // Generate IMG version if canvas is available
+    let imgFilename = null;
+    try {
+      if (createCanvas && loadImage) {
+        imgFilename = await generateIMGWithTemplate(certificateData, certificateType, refNo, verificationUrl, baseFilename);
+      }
+    } catch (imgError) {
+      console.warn('⚠️ IMG generation failed, continuing with PDF only:', imgError.message);
+    }
+    
+    console.log(`✅ Certificate generated: PDF=${pdfFilename}${imgFilename ? `, IMG=${imgFilename}` : ''}`);
+    return { 
+      imgFilename, 
+      pdfFilename, 
+      referenceNumber: refNo,
+      verificationUrl: verificationUrl
+    };
   } catch (error) {
     console.error('❌ Error generating certificate:', error);
     throw new Error(`Certificate generation failed: ${error.message}`);
@@ -77,14 +74,27 @@ async function generateComplexCertificate(certificateData, certificateType) {
 }
 
 /**
- * Main certificate generation function
+ * Main certificate generation function - Production Optimized for Render
  */
 async function generateCertificate(certificateData) {
   try {
-    return await generateSimpleCertificate(certificateData);
-  } catch (error) {
-    console.error('❌ Error generating certificate:', error);
-    throw error;
+    // Try production-optimized generation first (best for Render deployment)
+    const { generateProductionCertificate } = require('./productionCertificateGenerator');
+    console.log('🚀 Using production-optimized certificate generation...');
+    return await generateProductionCertificate(certificateData);
+  } catch (productionError) {
+    console.warn('⚠️ Production generation failed, trying enhanced generation:', productionError.message);
+    
+    // Fallback to enhanced generation
+    try {
+      const { generateEnhancedCertificate } = require('./enhancedCertificateGenerator');
+      console.log('🔄 Using enhanced certificate generation...');
+      return await generateEnhancedCertificate(certificateData);
+    } catch (enhancedError) {
+      console.warn('⚠️ Enhanced generation failed, falling back to simple generation:', enhancedError.message);
+      // Final fallback to existing simple generation
+      return await generateSimpleCertificate(certificateData);
+    }
   }
 }
 
@@ -153,6 +163,58 @@ async function addContentToCanvas(ctx, certificateData, certificateType, canvasW
   // Draw the last line
   if (currentLine.trim() !== '') {
     ctx.fillText(currentLine.trim(), startX, currentY);
+  }
+}
+
+/**
+ * Generate unique reference number for certificate
+ */
+function generateReferenceNumber() {
+  const timestamp = Date.now().toString().slice(-4);
+  const random = Math.floor(Math.random() * 9000) + 1000;
+  const year = new Date().getFullYear();
+  return `CERT_${year}_${timestamp}_${random}`;
+}
+
+/**
+ * Generate base filename for certificate files
+ */
+function generateBaseFilename(certificateData, certificateType, refNo) {
+  const safeRefNo = refNo.replace(/[^a-zA-Z0-9_-]/g, '_');
+  const type = (certificateType || 'COMPLETION').toUpperCase();
+  const course = (certificateData.course || certificateData.course_name || 'GENERAL').replace(/[^a-zA-Z0-9]/g, '_').toUpperCase();
+  const batch = (certificateData.batch || certificateData.batch_initials || 'GEN').replace(/[^a-zA-Z0-9]/g, '_').toUpperCase();
+  const year = new Date().getFullYear();
+  
+  return `${type}_${course}_${batch}_${year}_${safeRefNo}`;
+}
+
+/**
+ * Ensure directory exists, create if it doesn't
+ */
+async function ensureDirectoryExists(dirPath) {
+  try {
+    await fs.access(dirPath);
+  } catch {
+    await fs.mkdir(dirPath, { recursive: true });
+    console.log('📁 Created directory:', dirPath);
+  }
+}
+
+/**
+ * Format date for certificate display
+ */
+function formatDate(dateString) {
+  if (!dateString) return 'N/A';
+  try {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric' 
+    });
+  } catch {
+    return dateString;
   }
 }
 
@@ -500,80 +562,146 @@ async function generateCanvasCertificate(certificateData, refNo, verificationUrl
     throw new Error('Canvas not available');
   }
 
-  // Map certificate type to template file (based on actual available templates)
-  const templateMap = {
-    'PYTHON': 'G28 Python.jpg',
-    'JAVA': 'G12 Java.jpg', 
-    'VLSI': 'G10 VLSI.jpg',
-    'SQL': 'G12 SQL.jpg',
-    'CC': 'CC.jpg',
-    'DSA': 'DSA.jpg',
-    'ROBOTICS': 'ROBOTICS.jpg',
-    'AAD': 'AAD.jpg',
-    'ST&T': 'ST&T.jpg',
-    'AUTOCAD': 'Autocad.jpg',
-    'SAP FICO': 'SAP FICO.jpg',
-    'CS': 'G6 CS.jpg',
-    'ES': 'G7 ES.jpg',
-    'DS': 'G8 DS.jpg',
-    'G13 JAVA': 'G13 JAVA.jpg',
-    'G13 VLSI': 'G13 VLSI.jpg',
-    'G14 VLSI': 'G14 VLSI.jpg',
-    'G15 VLSI': 'G15 VLSI.jpg',
-    'G16 VLSI': 'G16 VLSI.jpg',
-    'G6 AUTOCAD': 'G6 AUTOCAD.jpg',
-    'G7 AUTOCAD': 'G7 Autocad.jpg'
-  };
-
-  // Find template based on course name
-  let templateFile = certificateData.templatePath || 'CC.jpg'; // Use provided template or default
-  const courseUpper = certificateData.course.toUpperCase();
-  
-  // Try to find best matching template
-  for (const [key, template] of Object.entries(templateMap)) {
-    if (courseUpper.includes(key)) {
-      templateFile = template;
-      break;
-    }
-  }
-
+  // Enhanced template mapping based on course/domain
+  const templateFile = findTemplateForCourse(certificateData.course || certificateData.course_name);
   const templatePath = path.join(__dirname, '../Certificate_Templates', templateFile);
   console.log('🎨 Using certificate template:', templateFile);
   
   try {
+    // Check if template exists
+    await fs.access(templatePath);
+    
     // Load template image as background
     const templateImage = await loadImage(templatePath);
     
-    // Create canvas with template dimensions
-    const canvas = createCanvas(templateImage.width, templateImage.height);
+    // Create A4 landscape canvas (842 x 595 points at 72 DPI)
+    const canvas = createCanvas(1191, 842); // A4 landscape at 300 DPI for high quality
     const ctx = canvas.getContext('2d');
     
-    // Draw template background first
-    ctx.drawImage(templateImage, 0, 0);
+    // Draw template background to fill entire A4 canvas
+    ctx.drawImage(templateImage, 0, 0, canvas.width, canvas.height);
     
-    // Now overlay the text and QR code on top of the template
+    // Overlay certificate content
+    await overlayStudentName(ctx, certificateData.name || certificateData.full_name, canvas.width, canvas.height);
+    await overlayCertificateContent(ctx, certificateData, canvas.width, canvas.height);
+    await addQRCodeBottomCenter(ctx, refNo, verificationUrl, canvas.width, canvas.height);
+    await addReferenceAndURL(ctx, refNo, verificationUrl, canvas.width, canvas.height);
     
-    // Set up text styling for overlaying on template
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    
-    // Insert student name (overlay on template)
-    await insertNameOnTemplate(ctx, certificateData.name, canvas.width, canvas.height);
-    
-    // Insert course details (overlay on template)
-    await insertCourseDetailsOnTemplate(ctx, certificateData, canvas.width, canvas.height);
-    
-    // Add QR code in corner
-    await addQRCodeToTemplate(ctx, refNo, verificationUrl, canvas.width, canvas.height);
-    
-    console.log('✅ Certificate generated with template background');
+    console.log('✅ Certificate generated with template background in A4 landscape');
     return canvas;
     
   } catch (templateError) {
-    console.warn('⚠️ Template loading failed, using fallback:', templateError.message);
-    // Fallback to simplified certificate if specific template fails
-    throw new Error('Template loading failed and no fallback available');
+    console.warn('⚠️ Template not found, creating certificate with "TEMPLATE MISSING" watermark');
+    return await generateTemplateWatermarkCertificate(certificateData, refNo, verificationUrl, templateFile);
   }
+}
+
+/**
+ * Find appropriate template based on course/domain name
+ */
+function findTemplateForCourse(courseName) {
+  if (!courseName) return 'CC.jpg'; // default
+  
+  const courseUpper = courseName.toUpperCase();
+  
+  // Comprehensive template mapping
+  const templateMap = {
+    // Programming Languages
+    'PYTHON': 'G28 Python.jpg',
+    'JAVA': 'G12 Java.jpg',
+    'SQL': 'G12 SQL.jpg',
+    
+    // Technologies & Domains
+    'CLOUD COMPUTING': 'CC.jpg',
+    'CC': 'CC.jpg',
+    'DATA STRUCTURES': 'DSA.jpg',
+    'DSA': 'DSA.jpg',
+    'ALGORITHMS': 'DSA.jpg',
+    'ROBOTICS': 'ROBOTICS.jpg',
+    'ANDROID': 'AAD.jpg',
+    'AAD': 'AAD.jpg',
+    'AUTOCAD': 'Autocad.jpg',
+    'SAP FICO': 'SAP FICO.jpg',
+    'FICO': 'SAP FICO.jpg',
+    'SOFTWARE TESTING': 'ST&T.jpg',
+    'ST&T': 'ST&T.jpg',
+    'TESTING': 'ST&T.jpg',
+    
+    // VLSI variants
+    'VLSI': 'G10 VLSI.jpg',
+    'G10': 'G10 VLSI.jpg',
+    'G13': 'G13 VLSI.jpg',
+    'G14': 'G14 VLSI.jpg',
+    'G15': 'G15 VLSI.jpg',
+    'G16': 'G16 VLSI.jpg',
+    
+    // Computer Science & Engineering
+    'CYBER SECURITY': 'G6 CS.jpg',
+    'CS': 'G6 CS.jpg',
+    'COMPUTER SCIENCE': 'G6 CS.jpg',
+    'EMBEDDED SYSTEMS': 'G7 ES.jpg',
+    'ES': 'G7 ES.jpg',
+    'EMBEDDED': 'G7 ES.jpg',
+    'DATA SCIENCE': 'G8 DS.jpg',
+    'DS': 'G8 DS.jpg',
+    'DATA': 'G8 DS.jpg',
+    
+    // Batch-specific mappings
+    'G6': 'G6 CS.jpg',
+    'G7': 'G7 ES.jpg',
+    'G8': 'G8 DS.jpg',
+    'G12': 'G12 Java.jpg',
+    'G28': 'G28 Python.jpg'
+  };
+  
+  // Check for exact matches first
+  for (const [keyword, template] of Object.entries(templateMap)) {
+    if (courseUpper.includes(keyword)) {
+      return template;
+    }
+  }
+  
+  // Default template if no match found
+  return 'CC.jpg';
+}
+
+/**
+ * Generate certificate with "TEMPLATE MISSING" watermark when template not found
+ */
+async function generateTemplateWatermarkCertificate(certificateData, refNo, verificationUrl, missingTemplate) {
+  // Create A4 landscape canvas
+  const canvas = createCanvas(1191, 842);
+  const ctx = canvas.getContext('2d');
+  
+  // White background
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  
+  // Add border
+  ctx.strokeStyle = '#000000';
+  ctx.lineWidth = 4;
+  ctx.strokeRect(20, 20, canvas.width - 40, canvas.height - 40);
+  
+  // Add "TEMPLATE MISSING" watermark
+  ctx.save();
+  ctx.translate(canvas.width / 2, canvas.height / 2);
+  ctx.rotate(-Math.PI / 6); // 30 degrees
+  ctx.fillStyle = 'rgba(255, 0, 0, 0.1)';
+  ctx.font = 'bold 120px Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText('TEMPLATE MISSING', 0, 0);
+  ctx.font = 'bold 40px Arial';
+  ctx.fillText(`(${missingTemplate})`, 0, 60);
+  ctx.restore();
+  
+  // Add certificate content over watermark
+  await overlayStudentName(ctx, certificateData.name, canvas.width, canvas.height);
+  await overlayCertificateContent(ctx, certificateData, canvas.width, canvas.height);
+  await addQRCodeBottomCenter(ctx, refNo, verificationUrl, canvas.width, canvas.height);
+  await addReferenceAndURL(ctx, refNo, verificationUrl, canvas.width, canvas.height);
+  
+  console.log('✅ Certificate generated with TEMPLATE MISSING watermark');
+  return canvas;
 }
 
 /**
@@ -1165,6 +1293,394 @@ async function addNameToCanvas(ctx, certificateData, canvasWidth) {
     console.log('✅ Name added to certificate:', name);
   } catch (error) {
     console.warn('⚠️ Error adding name to canvas:', error.message);
+  }
+}
+
+/**
+ * Generate PDF certificate with template background
+ */
+async function generatePDFWithTemplate(certificateData, certificateType, refNo, verificationUrl, baseFilename) {
+  try {
+    console.log('📄 Starting PDF generation with template background...');
+    
+    // Find template
+    const templateFile = findTemplateForCourse(certificateData.course || certificateData.course_name);
+    const templatePath = path.join(__dirname, '../Certificate_Templates', templateFile);
+    
+    const pdfDir = path.join(__dirname, '../Generated-Certificates/PDF');
+    const pdfFilename = `${baseFilename}.pdf`;
+    const pdfPath = path.join(pdfDir, pdfFilename);
+    
+    let templateExists = false;
+    try {
+      await fs.access(templatePath);
+      templateExists = true;
+      console.log('✅ Template found:', templateFile);
+    } catch {
+      console.warn('⚠️ Template not found:', templateFile);
+    }
+    
+    // Generate using canvas first, then convert to PDF
+    let canvas;
+    if (templateExists) {
+      canvas = await generateCanvasCertificate(certificateData, refNo, verificationUrl);
+    } else {
+      canvas = await generateTemplateWatermarkCertificate(certificateData, refNo, verificationUrl, templateFile);
+    }
+    
+    // Convert canvas to PDF
+    const doc = new PDFDocument({
+      size: [841.89, 595.28], // A4 landscape in points
+      margins: { top: 0, bottom: 0, left: 0, right: 0 }
+    });
+    
+    const stream = fs.createWriteStream ? require('fs').createWriteStream(pdfPath) : null;
+    if (stream) {
+      doc.pipe(stream);
+    }
+    
+    // Convert canvas to buffer and add to PDF
+    const canvasBuffer = canvas.toBuffer('image/png');
+    doc.image(canvasBuffer, 0, 0, {
+      width: 841.89,
+      height: 595.28,
+      fit: [841.89, 595.28]
+    });
+    
+    doc.end();
+    
+    // Wait for PDF to be written
+    if (stream) {
+      await new Promise((resolve, reject) => {
+        stream.on('finish', resolve);
+        stream.on('error', reject);
+      });
+    }
+    
+    console.log('✅ PDF certificate generated:', pdfFilename);
+    return pdfFilename;
+    
+  } catch (error) {
+    console.error('❌ Error generating PDF certificate:', error);
+    throw error;
+  }
+}
+
+/**
+ * Generate IMG certificate with template background
+ */
+async function generateIMGWithTemplate(certificateData, certificateType, refNo, verificationUrl, baseFilename) {
+  try {
+    console.log('🖼️ Starting IMG generation with template background...');
+    
+    const imgDir = path.join(__dirname, '../Generated-Certificates/IMG');
+    const imgFilename = `${baseFilename}.png`;
+    const imgPath = path.join(imgDir, imgFilename);
+    
+    // Find template
+    const templateFile = findTemplateForCourse(certificateData.course || certificateData.course_name);
+    
+    let canvas;
+    try {
+      canvas = await generateCanvasCertificate(certificateData, refNo, verificationUrl);
+    } catch (error) {
+      console.warn('⚠️ Template generation failed, using watermark version');
+      canvas = await generateTemplateWatermarkCertificate(certificateData, refNo, verificationUrl, templateFile);
+    }
+    
+    // Save as PNG
+    const buffer = canvas.toBuffer('image/png');
+    await fs.writeFile(imgPath, buffer);
+    
+    console.log('✅ IMG certificate generated:', imgFilename);
+    return imgFilename;
+    
+  } catch (error) {
+    console.error('❌ Error generating IMG certificate:', error);
+    throw error;
+  }
+}
+
+/**
+ * Generate certificate with "TEMPLATE MISSING" watermark when template is not found
+ */
+async function generateTemplateWatermarkCertificate(certificateData, refNo, verificationUrl, missingTemplateName) {
+  if (!createCanvas) {
+    throw new Error('Canvas not available for watermark generation');
+  }
+  
+  try {
+    console.log('⚠️ Creating certificate with TEMPLATE MISSING watermark');
+    
+    // Create A4 landscape canvas (1191 x 842 at 300 DPI)
+    const canvas = createCanvas(1191, 842);
+    const ctx = canvas.getContext('2d');
+    
+    // Create white background
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    // Add border
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(10, 10, canvas.width - 20, canvas.height - 20);
+    
+    // Add "TEMPLATE MISSING" watermark
+    ctx.save();
+    ctx.translate(canvas.width / 2, canvas.height / 2);
+    ctx.rotate(-Math.PI / 6); // -30 degrees
+    ctx.fillStyle = 'rgba(255, 0, 0, 0.1)';
+    ctx.font = 'bold 72px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('TEMPLATE MISSING', 0, 0);
+    ctx.restore();
+    
+    // Add template filename info
+    ctx.fillStyle = '#FF0000';
+    ctx.font = '16px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText(`Missing Template: ${missingTemplateName}`, canvas.width / 2, 50);
+    
+    // Add certificate header
+    ctx.fillStyle = '#000000';
+    ctx.font = 'bold 32px Times, serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('SURE Trust', canvas.width / 2, 120);
+    
+    ctx.font = '14px Times, serif';
+    ctx.fillText('(Skill Upgradation for Rural - Youth Empowerment)', canvas.width / 2, 150);
+    
+    ctx.font = '18px Times, serif';
+    ctx.fillText('Certificate of Completion', canvas.width / 2, 180);
+    
+    // Overlay certificate content
+    await overlayStudentName(ctx, certificateData.name || certificateData.full_name, canvas.width, canvas.height);
+    await overlayCertificateContent(ctx, certificateData, canvas.width, canvas.height);
+    await addQRCodeBottomCenter(ctx, refNo, verificationUrl, canvas.width, canvas.height);
+    await addReferenceAndURL(ctx, refNo, verificationUrl, canvas.width, canvas.height);
+    
+    console.log('✅ Certificate with TEMPLATE MISSING watermark generated');
+    return canvas;
+    
+  } catch (error) {
+    console.error('❌ Error generating watermark certificate:', error);
+    throw error;
+  }
+}
+
+/**
+ * Overlay student name on certificate template
+ */
+async function overlayStudentName(ctx, name, canvasWidth, canvasHeight) {
+  try {
+    if (!name) return;
+    
+    // Set text properties for student name
+    ctx.fillStyle = '#000000'; // Black text
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    
+    // Find appropriate font size that fits within the canvas width
+    let fontSize = 48;
+    let textWidth;
+    
+    do {
+      fontSize -= 2;
+      ctx.font = `bold ${fontSize}px Times, serif`;
+      const metrics = ctx.measureText(name);
+      textWidth = metrics.width;
+    } while (textWidth > canvasWidth * 0.6 && fontSize > 24);
+    
+    // Position name in the typical certificate name area
+    const x = canvasWidth / 2;
+    const y = canvasHeight * 0.45; // 45% down from top
+    
+    // Add subtle text shadow for better visibility on templates
+    ctx.shadowColor = 'rgba(255,255,255,0.7)';
+    ctx.shadowBlur = 2;
+    ctx.shadowOffsetX = 1;
+    ctx.shadowOffsetY = 1;
+    
+    // Draw the name
+    ctx.fillText(name, x, y);
+    
+    // Reset shadow
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
+    
+    console.log('✅ Student name overlaid:', name);
+  } catch (error) {
+    console.warn('⚠️ Error overlaying student name:', error.message);
+  }
+}
+
+/**
+ * Overlay certificate content (course details, dates, etc.)
+ */
+async function overlayCertificateContent(ctx, certificateData, canvasWidth, canvasHeight) {
+  try {
+    // Generate content text based on available data
+    let contentText = '';
+    const courseName = certificateData.course || certificateData.course_name || 'Unknown Course';
+    const startDate = certificateData.start_date || certificateData.startDate;
+    const endDate = certificateData.end_date || certificateData.endDate;
+    const gpa = certificateData.gpa || '8.5';
+    
+    // Create comprehensive certificate content
+    if (startDate && endDate) {
+      contentText = `For successful completion of four months training in "${courseName}" from ${formatDate(startDate)} to ${formatDate(endDate)} securing ${gpa} GPA, attending the mandatory "Life Skills Training" sessions, and completing the services to community launched by SURE Trust`;
+    } else {
+      contentText = `For successful completion of training in "${courseName}" demonstrating exceptional skills and commitment to excellence in learning at SURE Trust`;
+    }
+    
+    // Set font for content text
+    ctx.font = '18px Times, serif';
+    ctx.fillStyle = '#000000';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    
+    // Add subtle shadow for better visibility
+    ctx.shadowColor = 'rgba(255,255,255,0.6)';
+    ctx.shadowBlur = 1;
+    ctx.shadowOffsetX = 0.5;
+    ctx.shadowOffsetY = 0.5;
+    
+    // Position content below the name
+    const startX = canvasWidth * 0.1; // 10% from left margin
+    const startY = canvasHeight * 0.55; // Start at 55% down
+    const maxWidth = canvasWidth * 0.8; // Use 80% of canvas width
+    const lineHeight = 24;
+    
+    // Word wrap and draw text
+    const words = contentText.split(' ');
+    let currentLine = '';
+    let y = startY;
+    
+    for (const word of words) {
+      const testLine = currentLine + word + ' ';
+      const metrics = ctx.measureText(testLine);
+      
+      if (metrics.width > maxWidth && currentLine !== '') {
+        // Draw current line and start new one
+        ctx.fillText(currentLine.trim(), startX, y);
+        currentLine = word + ' ';
+        y += lineHeight;
+      } else {
+        currentLine = testLine;
+      }
+    }
+    
+    // Draw the last line
+    if (currentLine.trim() !== '') {
+      ctx.fillText(currentLine.trim(), startX, y);
+    }
+    
+    // Reset shadow
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
+    
+    console.log('✅ Certificate content overlaid');
+  } catch (error) {
+    console.warn('⚠️ Error overlaying certificate content:', error.message);
+  }
+}
+
+/**
+ * Add QR code at bottom center of certificate
+ */
+async function addQRCodeBottomCenter(ctx, refNo, verificationUrl, canvasWidth, canvasHeight) {
+  try {
+    // Generate QR code
+    const qrCodeBuffer = await QRCode.toBuffer(verificationUrl, {
+      width: 150,
+      margin: 2,
+      color: {
+        dark: '#000000',
+        light: '#FFFFFF'
+      },
+      errorCorrectionLevel: 'H',
+      scale: 8,
+      type: 'png'
+    });
+    
+    // Check if loadImage is available
+    if (!loadImage) {
+      console.warn('⚠️ loadImage not available, skipping QR code overlay');
+      return;
+    }
+    
+    // Load QR code as image
+    const qrImage = await loadImage(qrCodeBuffer);
+    
+    // Position QR code at bottom center
+    const qrSize = 100;
+    const qrX = (canvasWidth - qrSize) / 2; // Center horizontally
+    const qrY = canvasHeight - qrSize - 30; // 30px from bottom
+    
+    // Add white background for QR code with padding
+    const padding = 8;
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(qrX - padding, qrY - padding, qrSize + (padding * 2), qrSize + (padding * 2));
+    
+    // Add border around QR code
+    ctx.strokeStyle = '#CCCCCC';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(qrX - padding, qrY - padding, qrSize + (padding * 2), qrSize + (padding * 2));
+    
+    // Draw QR code
+    ctx.drawImage(qrImage, qrX, qrY, qrSize, qrSize);
+    
+    console.log('✅ QR code added at bottom center');
+  } catch (error) {
+    console.warn('⚠️ Error adding QR code:', error.message);
+    // Draw placeholder if QR generation fails
+    const qrSize = 100;
+    const qrX = (canvasWidth - qrSize) / 2;
+    const qrY = canvasHeight - qrSize - 30;
+    
+    ctx.fillStyle = '#F0F0F0';
+    ctx.fillRect(qrX, qrY, qrSize, qrSize);
+    ctx.strokeStyle = '#CCCCCC';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(qrX, qrY, qrSize, qrSize);
+    
+    ctx.fillStyle = '#666666';
+    ctx.font = '12px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('QR Code', qrX + qrSize/2, qrY + qrSize/2);
+  }
+}
+
+/**
+ * Add reference number and verification URL at bottom of certificate
+ */
+async function addReferenceAndURL(ctx, refNo, verificationUrl, canvasWidth, canvasHeight) {
+  try {
+    // Set font for reference info
+    ctx.font = '12px Times, serif';
+    ctx.fillStyle = '#333333';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    
+    // Position reference number and URL at bottom
+    const bottomY = canvasHeight - 10; // 10px from bottom
+    const centerX = canvasWidth / 2;
+    
+    // Add reference number
+    ctx.fillText(`Reference No: ${refNo}`, centerX, bottomY - 15);
+    
+    // Add verification URL
+    ctx.font = '10px Times, serif';
+    ctx.fillText(`Verify at: ${verificationUrl}`, centerX, bottomY);
+    
+    console.log('✅ Reference number and URL added');
+  } catch (error) {
+    console.warn('⚠️ Error adding reference and URL:', error.message);
   }
 }
 
