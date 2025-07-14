@@ -178,6 +178,7 @@
             <button id="forceRefreshBtn" style="background: #dc3545; color: white;">🔄 Force Refresh</button>
             <button id="generateAllBtn" class="generate">⚡ Generate All Pending</button>
             <button id="syncFormsBtn" style="background: #17a2b8; color: white;">📥 Sync Google Forms</button>
+            <button id="testGoogleSheetsBtn" style="background: #6f42c1; color: white;">🔧 Test Google Sheets</button>
             <button id="testAPIBtn" style="background: #ffc107; color: #000;">🔧 Test API</button>
         </div>
         
@@ -227,6 +228,7 @@
             document.getElementById('forceRefreshBtn').addEventListener('click', forceRefresh);
             document.getElementById('generateAllBtn').addEventListener('click', generateAllPending);
             document.getElementById('syncFormsBtn').addEventListener('click', syncGoogleForms);
+            document.getElementById('testGoogleSheetsBtn').addEventListener('click', testGoogleSheets);
             document.getElementById('testAPIBtn').addEventListener('click', testAPI);
             
             // Status filter change listener
@@ -417,8 +419,8 @@
                                                         <a href="${cert.verification_url}" target="_blank" style="color: #28a745; text-decoration: none;">View Certificate</a><br>
                                                         ${cert.certificate_ref_no ? 
                                                             `<div style="margin-top: 5px;">
-                                                                <a href="/certificates/img/${cert.certificate_ref_no}.png" target="_blank" style="color: #007bff; font-size: 0.8em; margin-right: 8px;" class="cert-file-link">IMG</a>
-                                                                <a href="/certificates/pdf/${cert.certificate_ref_no}.pdf" target="_blank" style="color: #dc3545; font-size: 0.8em;" class="cert-file-link">PDF</a>
+                                                                <a href="/api/certificate-files/${cert.certificate_ref_no}/img" target="_blank" style="color: #007bff; font-size: 0.8em; margin-right: 8px;" class="cert-file-link">IMG</a>
+                                                                <a href="/api/certificate-files/${cert.certificate_ref_no}/pdf" target="_blank" style="color: #dc3545; font-size: 0.8em;" class="cert-file-link">PDF</a>
                                                             </div>` : ''
                                                         }
                                                         <small style="color: #666;">Ref: ${cert.certificate_ref_no || 'N/A'}</small><br>
@@ -614,12 +616,41 @@
             }
         }
         
-        // Sync Google Form responses
-        async function syncGoogleForms() {
-            // Sync Google Form data by fetching from Google Sheets via API/editor access
+        // Test Google Sheets connectivity
+        async function testGoogleSheets() {
+            showMessage('Testing Google Sheets connectivity...', 'loading');
             
             try {
-                showMessage('🔄 Syncing Google Form responses...', 'loading');
+                const response = await fetch(`${API_BASE}/admin/test-google-sheets`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    showMessage(`✅ Google Sheets working! Data available: ${data.details.dataAvailable ? 'Yes' : 'No'}`, 'success');
+                } else {
+                    let errorMessage = `❌ Google Sheets Error: ${data.message || data.error}`;
+                    
+                    if (data.details && data.details.fallbackMode) {
+                        errorMessage += '<br>🔧 <strong>SOLUTION:</strong> Service account key needs regeneration';
+                        errorMessage += '<br>📝 Go to: <a href="https://console.cloud.google.com/iam-admin/serviceaccounts" target="_blank">Google Cloud Console</a>';
+                        errorMessage += '<br>📧 Service Account: sure-trust@opportune-sylph-458214-b8.iam.gserviceaccount.com';
+                        errorMessage += '<br>📊 Sheet ID: 1zzdRjH24Utl5AWQk6SXOcJ9DnHw4H2hWg3SApHWLUPU';
+                    }
+                    
+                    showMessage(errorMessage, 'error');
+                }
+                
+                console.log('Google Sheets test result:', data);
+                
+            } catch (error) {
+                console.error('Error testing Google Sheets:', error);
+                showMessage('❌ Error testing Google Sheets: ' + error.message, 'error');
+            }
+        }
+
+        // Sync Google Form responses (enhanced version with better error reporting)
+        async function syncGoogleForms() {
+            try {
+                showMessage('🔄 Syncing Google Form responses... (with fallback support)', 'loading');
                 
                 const response = await fetch(`${API_BASE}/admin/sync-current-forms`, {
                     method: 'POST',
@@ -629,27 +660,37 @@
                 });
                 
                 const data = await response.json();
-                console.log('Sync result:', data);
+                console.log('Enhanced sync result:', data);
                 
                 if (response.ok && data.success) {
-                    const { summary } = data;
-                    showMessage(
-                        `✅ Sync completed! Added: ${summary.successful}, Already existed: ${summary.alreadyExists}, Failed: ${summary.failed}`,
-                        'success'
-                    );
+                    const { summary, syncSource, googleSheetsStatus } = data;
+                    
+                    let message = `✅ Sync completed from ${syncSource}!`;
+                    message += `<br>📊 Added: ${summary.successful}, Already existed: ${summary.alreadyExists}, Failed: ${summary.failed}`;
+                    
+                    if (googleSheetsStatus === 'unavailable') {
+                        message += '<br>⚠️ <strong>Note:</strong> Google Sheets unavailable - used fallback data';
+                        message += '<br>🔧 <strong>Recommendation:</strong> ' + data.recommendation;
+                    }
+                    
+                    showMessage(message, googleSheetsStatus === 'working' ? 'success' : 'error');
                     
                     // Refresh data
                     loadCertificates();
                     loadStats();
                 } else {
-                    showMessage(`❌ Sync failed: ${data.error || data.message}`, 'error');
+                    let errorMessage = `❌ Sync failed: ${data.error || data.message}`;
+                    if (data.recommendation) {
+                        errorMessage += '<br>💡 ' + data.recommendation;
+                    }
+                    showMessage(errorMessage, 'error');
                 }
             } catch (error) {
                 console.error('Error syncing forms:', error);
                 showMessage('❌ Error syncing Google Forms: ' + error.message, 'error');
             }
         }
-        
+
         // Force refresh function to bypass all caches
         function forceRefresh() {
             // Clear browser cache for this page
