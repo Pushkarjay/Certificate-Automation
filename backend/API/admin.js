@@ -455,60 +455,78 @@ function convertToCSV(data) {
   return [csvHeaders, ...csvRows].join('\n');
 }
 
-// Manual sync endpoint for current Google Form responses
+// Test endpoint for Google Sheets API connectivity
+router.get('/test-google-sheets', async (req, res) => {
+  try {
+    console.log('🔄 Testing Google Sheets connectivity...');
+    
+    const googleSheetsService = require('../services/googleSheetsService');
+    const connectionTest = await googleSheetsService.testConnection();
+    
+    res.json({
+      success: connectionTest.success,
+      message: connectionTest.message || connectionTest.error,
+      details: connectionTest,
+      timestamp: new Date().toISOString(),
+      serviceAccount: 'sure-trust@opportune-sylph-458214-b8.iam.gserviceaccount.com',
+      spreadsheetId: '1zzdRjH24Utl5AWQk6SXOcJ9DnHw4H2hWg3SApHWLUPU',
+      fallbackMode: connectionTest.fallbackMode || false
+    });
+    
+  } catch (error) {
+    console.error('❌ Google Sheets test error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Google Sheets test failed',
+      details: error.message,
+      timestamp: new Date().toISOString(),
+      recommendation: 'Check service account credentials and sheet permissions'
+    });
+  }
+});
+
+// Enhanced sync endpoint with better error reporting
 router.post('/sync-current-forms', async (req, res) => {
   try {
-    console.log('🔄 Starting sync of Google Form responses from Google Sheets...');
+    console.log('🔄 Starting enhanced sync of Google Form responses...');
     
     // Import Google Sheets service
     const googleSheetsService = require('../services/googleSheetsService');
     
     let responses;
+    let syncSource = 'unknown';
+    
     try {
-      // Fetch real data from Google Sheets
-      const rawData = await googleSheetsService.fetchFormData();
-      responses = googleSheetsService.normalizeFormData(rawData);
-      console.log(`📥 Fetched ${responses.length} responses from Google Sheets`);
-    } catch (googleError) {
-      console.error('❌ Failed to fetch from Google Sheets:', googleError.message);
+      // Test connection first
+      const connectionTest = await googleSheetsService.testConnection();
+      console.log('📊 Google Sheets connection test:', connectionTest);
       
-      // Fallback to sample data if Google Sheets fails
-      console.log('🔄 Using fallback sample data...');
-      responses = [
-        {
-          title: 'Mr',
-          full_name: 'PUSHKARJAY AJAY',
-          email_address: 'pushkarjay@example.com',
-          phone: '+91-9876543210',
-          gender: 'Male',
-          date_of_birth: '1995-05-15',
-          course_name: 'Full Stack Development',
-          batch_initials: 'G30',
-          start_date: '2025-01-01',
-          end_date: '2025-03-31',
-          gpa: '8.5',
-          certificate_type: 'student',
-          form_source: 'google_forms'
-        },
-        {
-          title: 'Mr',
-          full_name: 'Sample User',
-          email_address: 'sample@example.com',
-          phone: '+91-9876543211',
-          gender: 'Male',
-          date_of_birth: '1994-08-20',
-          course_name: 'Data Science',
-          batch_initials: 'G31',
-          start_date: '2025-01-01',
-          end_date: '2025-03-31',
-          gpa: '9.0',
-          certificate_type: 'student',
-          form_source: 'google_forms'
-        }
-      ];
+      if (connectionTest.success) {
+        console.log('✅ Google Sheets available - fetching real data');
+        const rawData = await googleSheetsService.fetchFormData();
+        responses = googleSheetsService.normalizeFormData(rawData);
+        syncSource = 'google_sheets';
+        console.log(`📥 Fetched ${responses.length} responses from Google Sheets`);
+      } else {
+        console.log('⚠️ Google Sheets unavailable - using fallback data');
+        const fallbackData = googleSheetsService.getFallbackData();
+        responses = googleSheetsService.normalizeFormData(fallbackData);
+        syncSource = 'fallback_data';
+        console.log(`📥 Using ${responses.length} fallback responses`);
+      }
+      
+    } catch (googleError) {
+      console.error('❌ Google Sheets error:', googleError.message);
+      
+      // Use fallback data
+      console.log('🔄 Using fallback data due to Google Sheets error...');
+      const googleSheetsService = require('../services/googleSheetsService');
+      const fallbackData = googleSheetsService.getFallbackData();
+      responses = googleSheetsService.normalizeFormData(fallbackData);
+      syncSource = 'fallback_data';
     }
     
-    console.log(`📋 Processing ${responses.length} form responses...`);
+    console.log(`📋 Processing ${responses.length} form responses from ${syncSource}...`);
     
     const results = [];
     
@@ -544,8 +562,8 @@ router.post('/sync-current-forms', async (req, res) => {
           response.title, response.full_name, response.email_address, 
           response.phone, response.gender, response.date_of_birth,
           response.course_name, response.batch_initials, response.start_date, 
-          response.end_date, response.gpa, response.certificate_type, 
-          response.form_source, 'pending', new Date(), new Date()
+          response.end_date, response.gpa, response.certificate_type || 'student', 
+          syncSource, 'pending', new Date(), new Date()
         ];
         
         const result = await dbService.query(insertQuery, values);
@@ -570,67 +588,34 @@ router.post('/sync-current-forms', async (req, res) => {
 
     const successful = results.filter(r => r.success).length;
     const failed = results.filter(r => !r.success).length;
+    const alreadyExists = results.filter(r => r.message?.includes('Already exists')).length;
 
-    console.log(`🎉 Manual sync completed: ${successful} successful, ${failed} failed`);
+    console.log(`🎉 Enhanced sync completed: ${successful} successful, ${failed} failed, ${alreadyExists} already existed`);
 
     res.json({
       success: true,
-      message: 'Manual sync completed',
+      message: 'Enhanced sync completed',
+      syncSource: syncSource,
       results: results,
       summary: {
         totalProcessed: responses.length,
         successful: successful,
         failed: failed,
-        alreadyExists: results.filter(r => r.message?.includes('Already exists')).length
-      }
+        alreadyExists: alreadyExists
+      },
+      googleSheetsStatus: syncSource === 'google_sheets' ? 'working' : 'unavailable',
+      recommendation: syncSource === 'fallback_data' ? 
+        'Google Sheets unavailable - consider regenerating service account key' : 
+        'Google Sheets working normally'
     });
 
   } catch (error) {
-    console.error('❌ Manual sync error:', error);
+    console.error('❌ Enhanced sync error:', error);
     res.status(500).json({ 
       success: false,
-      error: 'Manual sync failed', 
-      details: error.message 
-    });
-  }
-});
-
-// Test endpoint for Google Sheets API connectivity
-router.get('/test-google-sheets', async (req, res) => {
-  try {
-    console.log('🧪 Testing Google Sheets API connection...');
-    
-    const googleSheetsService = require('../services/googleSheetsService');
-    
-    // Test basic connection
-    await googleSheetsService.initialize();
-    console.log('✅ Google Sheets service initialized');
-    
-    // Test fetching a small amount of data
-    const testData = await googleSheetsService.fetchFormData(
-      '1zzdRjH24Utl5AWQk6SXOcJ9DnHw4H2hWg3SApHWLUPU', 
-      'Form Responses 1!A1:Z5' // Only first 5 rows for testing
-    );
-    
-    res.json({
-      success: true,
-      message: 'Google Sheets API connection successful',
-      dataCount: testData.length,
-      sampleHeaders: testData.length > 0 ? Object.keys(testData[0]) : [],
-      timestamp: new Date().toISOString()
-    });
-    
-  } catch (error) {
-    console.error('❌ Google Sheets test failed:', error.message);
-    
-    res.status(500).json({
-      success: false,
-      error: error.message,
-      details: {
-        status: error.status || error.code,
-        message: error.message
-      },
-      timestamp: new Date().toISOString()
+      error: 'Enhanced sync failed', 
+      details: error.message,
+      recommendation: 'Check Google Sheets connection and database status'
     });
   }
 });
