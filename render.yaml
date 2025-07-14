@@ -7,7 +7,7 @@ services:
     name: certificate-automation
     env: node
     plan: free
-    buildCommand: echo "Directory structure check..." && pwd && ls -la && echo "Installing root dependencies..." && npm install && echo "Installing backend dependencies..." && cd backend && npm install && cd .. && echo "Installing frontend dependencies..." && cd Frontend/React && npm install && npm run build && echo "Build completed!"
+    buildCommand: echo "Starting build process..." && pwd && ls -la && echo "Installing backend dependencies..." && cd backend && npm install && cd .. && echo "Installing frontend dependencies..." && cd Frontend/React && npm install && npm run build && echo "Build completed successfully!"
     startCommand: cd backend && npm start
     envVars:
       - key: NODE_ENV

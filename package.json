@@ -1,7 +1,8 @@
 {
   "name": "certificate-automation",
   "version": "1.0.0",
-  "description": "Certificate Automation System - Combined Deployment",
+  "description": "Certificate Automation System - Monorepo",
+  "private": true,
   "scripts": {
     "build": "cd Frontend/React && npm install && npm run build",
     "start": "cd backend && npm start",
@@ -9,7 +10,11 @@
     "dev:backend": "cd backend && npm run dev",
     "dev:frontend": "cd Frontend/React && npm start",
     "install:all": "cd backend && npm install && cd ../Frontend/React && npm install",
-    "postinstall": "npm run build"
+    "install:backend": "cd backend && npm install",
+    "install:frontend": "cd Frontend/React && npm install",
+    "postinstall": "npm run install:all && npm run build",
+    "clean": "rm -rf backend/node_modules Frontend/React/node_modules",
+    "clean:win": "rmdir /s /q backend\\node_modules Frontend\\React\\node_modules"
   },
   "engines": {
     "node": ">=16.0.0",
@@ -20,12 +25,9 @@
     "automation",
     "nodejs",
     "react",
-    "fullstack"
+    "fullstack",
+    "monorepo"
   ],
   "author": "SURE Trust",
-  "license": "MIT",
-  "dependencies": {
-    "canvas": "^3.1.2",
-    "sharp": "^0.34.3"
-  }
+  "license": "MIT"
 }

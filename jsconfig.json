@@ -15,17 +15,16 @@
     "resolveJsonModule": true
   },
   "include": [
-    "Backend/**/*",
+    "backend/**/*",
     "Frontend/**/*", 
     "scripts/**/*",
     "Database/**/*",
     "Google/**/*"
   ],
   "exclude": [
-    "node_modules",
-    "Backend/node_modules",
+    "backend/node_modules",
     "Frontend/React/node_modules",
     "dist",
-    "Backend/Generated-Certificates/**/*"
+    "backend/Generated-Certificates/**/*"
   ]
 }
