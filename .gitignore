@@ -1,3 +1,7 @@
+#Github
+.gitattributes
+.gitignore
+
 # Dependencies
 node_modules/
 jspm_packages/
