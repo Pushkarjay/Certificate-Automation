@@ -6,13 +6,11 @@
   "scripts": {
     "build": "cd Frontend/React && npm install && npm run build",
     "start": "cd backend && npm start",
-    "dev": "npm run dev:backend & npm run dev:frontend",
+    "install:all": "npm install && cd backend && npm install && cd .. && cd Frontend/React && npm install && cd ../..",
+    "install:backend": "cd backend && npm install && cd ..",
+    "install:frontend": "cd Frontend/React && npm install && cd ../..",
     "dev:backend": "cd backend && npm run dev",
     "dev:frontend": "cd Frontend/React && npm start",
-    "install:all": "cd backend && npm install && cd ../Frontend/React && npm install",
-    "install:backend": "cd backend && npm install",
-    "install:frontend": "cd Frontend/React && npm install",
-    "postinstall": "npm run install:all && npm run build",
     "clean": "rm -rf backend/node_modules Frontend/React/node_modules",
     "clean:win": "rmdir /s /q backend\\node_modules Frontend\\React\\node_modules"
   },
