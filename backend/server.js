@@ -137,7 +137,7 @@ app.get('/admin-dashboard.html', (req, res) => {
     // More permissive CSP for admin dashboard
     'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; connect-src 'self' https://certificate-automation-dmoe.onrender.com; font-src 'self' data:; object-src 'none';"
   });
-  res.sendFile(path.join(__dirname, '../admin-dashboard.html'));
+  res.sendFile(path.join(__dirname, '../Frontend/admin-dashboard.html'));
 });
 
 // Performance monitoring setup
