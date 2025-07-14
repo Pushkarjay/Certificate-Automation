@@ -48,16 +48,23 @@ Frontend/React/
 - ❌ **Before**: Install root → backend → frontend (3 steps)
 - ✅ **After**: Install backend → frontend (2 steps)
 
-### 3. **Better Scripts**
+### 3. **Better Scripts - Sequential Approach**
 ```json
 {
-  "install:backend": "cd backend && npm install",
-  "install:frontend": "cd Frontend/React && npm install", 
-  "install:all": "npm run install:backend && npm run install:frontend",
-  "clean": "rm -rf backend/node_modules Frontend/React/node_modules",
-  "dev": "npm run dev:backend & npm run dev:frontend"
+  "install:all": "npm install && cd backend && npm install && cd .. && cd Frontend/React && npm install && cd ../..",
+  "install:backend": "cd backend && npm install && cd ..",
+  "install:frontend": "cd Frontend/React && npm install && cd ../..",
+  "dev:backend": "cd backend && npm run dev",
+  "dev:frontend": "cd Frontend/React && npm start",
+  "clean": "rm -rf backend/node_modules Frontend/React/node_modules"
 }
 ```
+
+**Why Sequential Approach?**
+- ✅ **Cross-platform compatible** - Works on Windows, Linux, macOS
+- ✅ **No additional dependencies** - No need for concurrently or complex tools
+- ✅ **Clear execution flow** - Easy to debug and understand
+- ✅ **Reliable navigation** - Explicit directory changes with proper returns
 
 ### 4. **Updated Dependencies**
 - `canvas`: `2.11.2` → `3.1.2`
@@ -66,32 +73,46 @@ Frontend/React/
 ## 🚀 Development Commands
 
 ```bash
-# Install all dependencies
+# Install all dependencies (sequential approach)
 npm run install:all
 
-# Development mode
-npm run dev
+# Install specific components
+npm run install:backend   # Backend only
+npm run install:frontend  # Frontend only
 
-# Backend only
-npm run dev:backend
+# Development mode (run separately)
+npm run dev:backend       # Start backend dev server
+npm run dev:frontend      # Start React dev server (separate terminal)
 
-# Frontend only  
-npm run dev:frontend
+# Production
+npm run build            # Build React app
+npm start               # Start production server
 
-# Production build
-npm run build
-
-# Clean all node_modules
-npm run clean:win  # Windows
-npm run clean      # Unix/Linux
+# Clean up
+npm run clean           # Unix/Linux
+npm run clean:win       # Windows
 ```
+
+**Development Workflow:**
+1. Run `npm run install:all` once to install all dependencies
+2. Open two terminals:
+   - Terminal 1: `npm run dev:backend` (API server on port 5000)
+   - Terminal 2: `npm run dev:frontend` (React dev server on port 3000)
 
 ## 📦 Deployment
 
-The project is optimized for Render deployment:
-1. Install backend dependencies
-2. Install frontend dependencies  
-3. Build React app
-4. Start backend server
+The project is optimized for Render deployment with sequential installation:
 
-No root-level dependencies needed! 🎉
+**Build Process:**
+1. `npm install` (root - minimal dependencies)
+2. `cd backend && npm install` (API dependencies)  
+3. `cd Frontend/React && npm install && npm run build` (React build)
+4. `cd backend && npm start` (Start production server)
+
+**Benefits:**
+- ✅ **No root-level dependencies** - Clean separation
+- ✅ **Sequential execution** - Reliable and debuggable
+- ✅ **Cross-platform** - Works everywhere
+- ✅ **Simple deployment** - No complex orchestration needed
+
+Perfect for production! 🎉
