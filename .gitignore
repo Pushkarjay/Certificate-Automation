@@ -39,6 +39,12 @@ Backend/test-output/
 .env.production.local
 .env.render
 
+# Google Service Account Keys (Security Sensitive)
+*.json
+sure-trust-*.json
+*service-account*.json
+*credentials*.json
+
 # IDE files
 .vscode/
 .idea/

@@ -8,7 +8,14 @@ const path = require('path');
  */
 function getGoogleCredentials() {
   try {
-    // Production: Read from environment variable
+    // Check for base64 encoded key in environment variable (works for both dev and prod)
+    if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY_BASE64) {
+      console.log('🔑 Loading Google credentials from environment variable (base64)...');
+      const decodedKey = Buffer.from(process.env.GOOGLE_SERVICE_ACCOUNT_KEY_BASE64, 'base64').toString('utf8');
+      return JSON.parse(decodedKey);
+    }
+    
+    // Production: Read from environment variable (non-base64)
     if (process.env.NODE_ENV === 'production' && process.env.GOOGLE_SERVICE_ACCOUNT_KEY) {
       console.log('🔑 Loading Google credentials from environment variable...');
       const decodedKey = Buffer.from(process.env.GOOGLE_SERVICE_ACCOUNT_KEY, 'base64').toString('utf8');
@@ -18,6 +25,7 @@ function getGoogleCredentials() {
     // Development: Read from local file
     const credentialsPaths = [
       path.join(__dirname, '..', '..', 'sure-trust-1-service-account.json'),
+      path.join(__dirname, '..', '..', 'sure-trust-1-1a35a986a881.json'),
       path.join(__dirname, '..', '..', 'opportune-sylph-458214-b8-490493912c83.json'),
       path.join(__dirname, '..', '..', 'opportune-sylph-458214-b8-74a78b125fe6.json'),
       path.join(__dirname, '..', '..', 'confidential-templates', 'opportune-sylph-458214-b8-74a78b125fe6.json')
@@ -36,7 +44,10 @@ function getGoogleCredentials() {
   } catch (error) {
     console.error('❌ Error loading Google credentials:', error.message);
     
-    if (process.env.NODE_ENV === 'production') {
+    if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY_BASE64) {
+      console.error('📝 Error parsing base64 encoded service account key');
+      console.error('📝 Make sure GOOGLE_SERVICE_ACCOUNT_KEY_BASE64 contains valid base64 JSON');
+    } else if (process.env.NODE_ENV === 'production') {
       console.error('📝 Make sure GOOGLE_SERVICE_ACCOUNT_KEY environment variable is set');
       console.error('📝 Encode your JSON file: base64 -i your-service-account.json');
     } else {
