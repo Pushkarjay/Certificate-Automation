@@ -1,10 +1,10 @@
 const express = require('express');
 const router = express.Router();
-const certificateStorage = require('../services/certificateStorageService');
+const sheetsDb = require('../services/sheetsDatabase');
 
 /**
  * Certificate File Serving API
- * Serves PDF certificate files stored in PostgreSQL database
+ * Serves PDF certificate files stored in Google Sheets as base64
  */
 
 /**
@@ -16,24 +16,27 @@ router.get('/:refNo/pdf', async (req, res) => {
     const { refNo } = req.params;
     console.log(`📄 Serving PDF certificate for ${refNo}`);
     
-    const file = await certificateStorage.getCertificateFile(refNo, 'pdf');
+    const certificate = await sheetsDb.findByVerificationCode(refNo);
     
-    if (!file) {
+    if (!certificate || !certificate.certificate_pdf_base64) {
       return res.status(404).json({ 
         error: 'Certificate not found',
         message: `No PDF certificate found for reference: ${refNo}`
       });
     }
     
+    // Convert base64 to buffer
+    const pdfBuffer = Buffer.from(certificate.certificate_pdf_base64, 'base64');
+    
     // Set appropriate headers
-    res.setHeader('Content-Type', file.contentType);
-    res.setHeader('Content-Disposition', `inline; filename="${file.filename}"`);
-    res.setHeader('Content-Length', file.size);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${refNo}.pdf"`);
+    res.setHeader('Content-Length', pdfBuffer.length);
     res.setHeader('Cache-Control', 'public, max-age=3600'); // Cache for 1 hour
     
     // Send the binary data
-    res.send(file.data);
-    console.log(`✅ PDF certificate served for ${refNo} (${file.size} bytes)`);
+    res.send(pdfBuffer);
+    console.log(`✅ PDF certificate served for ${refNo} (${pdfBuffer.length} bytes)`);
     
   } catch (error) {
     console.error('❌ Error serving PDF certificate:', error);
@@ -53,21 +56,26 @@ router.get('/:refNo/info', async (req, res) => {
     const { refNo } = req.params;
     console.log(`ℹ️ Getting certificate info for ${refNo}`);
     
-    // Only check for PDF file
-    const pdfFile = await certificateStorage.getCertificateFile(refNo, 'pdf');
+    const certificate = await sheetsDb.findByVerificationCode(refNo);
     
     const info = {
       certificateRefNo: refNo,
       files: {
-        pdf: pdfFile ? { 
+        pdf: certificate && certificate.certificate_pdf_base64 ? { 
           available: true, 
-          size: pdfFile.size, 
-          contentType: pdfFile.contentType,
+          size: Math.round(certificate.certificate_pdf_base64.length * 0.75), // Approximate size from base64
+          contentType: 'application/pdf',
           url: `/api/certificate-files/${refNo}/pdf`
         } : { available: false }
       },
-      generatedAt: pdfFile?.generatedAt,
-      format: 'pdf'
+      generatedAt: certificate?.issue_date || certificate?.updated_at,
+      format: 'pdf',
+      certificateInfo: certificate ? {
+        holderName: certificate.full_name,
+        courseName: certificate.course_name,
+        issueDate: certificate.issue_date,
+        status: certificate.status
+      } : null
     };
     
     res.json(info);
@@ -90,7 +98,7 @@ router.get('/stats', async (req, res) => {
   try {
     console.log('📊 Getting certificate storage statistics');
     
-    const stats = await certificateStorage.getStorageStats();
+    const stats = await sheetsDb.getStats();
     
     if (!stats) {
       return res.status(500).json({ 
@@ -98,9 +106,19 @@ router.get('/stats', async (req, res) => {
       });
     }
     
+    // Calculate total storage from stats
+    const totalCertificates = Object.values(stats).reduce((sum, stat) => sum + stat.total, 0);
+    const totalIssued = Object.values(stats).reduce((sum, stat) => sum + stat.issued, 0);
+    
     res.json({
       success: true,
-      statistics: stats,
+      statistics: {
+        totalCertificates,
+        totalIssued,
+        storageType: 'Google Sheets (Base64)',
+        byType: stats,
+        estimatedStorageUsed: `${Math.round(totalIssued * 2)}MB` // Rough estimate
+      },
       retrievedAt: new Date().toISOString()
     });
     

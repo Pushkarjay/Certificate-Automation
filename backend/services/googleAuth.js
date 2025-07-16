@@ -17,6 +17,7 @@ function getGoogleCredentials() {
     
     // Development: Read from local file
     const credentialsPaths = [
+      path.join(__dirname, '..', '..', 'sure-trust-1-service-account.json'),
       path.join(__dirname, '..', '..', 'opportune-sylph-458214-b8-490493912c83.json'),
       path.join(__dirname, '..', '..', 'opportune-sylph-458214-b8-74a78b125fe6.json'),
       path.join(__dirname, '..', '..', 'confidential-templates', 'opportune-sylph-458214-b8-74a78b125fe6.json')

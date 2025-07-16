@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const dbService = require('../services/databaseService');
+const sheetsDb = require('../services/sheetsDatabase');
 const Joi = require('joi');
 
 // Flexible validation schema for form submissions
@@ -207,63 +207,38 @@ function normalizeGoogleFormData(formData) {
   return normalized;
 }
 
-// Function to insert form submission into database
+// Function to insert form submission into Google Sheets
 async function insertFormSubmission(data) {
   try {
-    // Define valid database fields for form_submissions table
-    const validFields = [
-      'timestamp', 'email_address', 'title', 'full_name', 'phone', 'date_of_birth', 'gender',
-      'address_line1', 'address_line2', 'city', 'state', 'country', 'postal_code',
-      'qualification', 'institution', 'specialization', 'experience_years', 'organization', 
-      'position', 'employee_id', 'course_name', 'course_domain', 'batch_initials', 
-      'batch_name', 'training_type', 'training_mode', 'start_date', 'end_date', 
-      'training_start_date', 'training_end_date', 'attendance_percentage', 'assessment_score', 
-      'gpa', 'grade', 'performance_rating', 'training_hours', 'training_duration_hours',
-      'certificate_type', 'status', 'additional_data', 'form_source', 'raw_form_data'
-    ];
+    console.log('📝 Inserting form submission into Google Sheets...');
     
-    // Filter data to only include valid database fields
-    const filteredData = {};
-    Object.keys(data).forEach(key => {
-      if (validFields.includes(key) && data[key] !== undefined && data[key] !== null) {
-        filteredData[key] = data[key];
-      }
-    });
+    // Determine certificate type from data
+    const certificateType = data.certificate_type || 'student';
     
     // Ensure required fields have defaults
-    if (!filteredData.status) {
-      filteredData.status = 'pending';
+    if (!data.status) {
+      data.status = 'pending';
     }
-    if (!filteredData.form_source) {
-      filteredData.form_source = 'google_forms';
+    if (!data.form_source) {
+      data.form_source = 'google_forms';
     }
     
     // Store metadata in additional_data if it doesn't exist
-    if (!filteredData.additional_data) {
+    if (!data.additional_data) {
       const metadata = {};
       if (data.response_id) metadata.response_id = data.response_id;
       if (data.form_id) metadata.form_id = data.form_id;
       if (Object.keys(metadata).length > 0) {
-        filteredData.additional_data = JSON.stringify(metadata);
+        data.additional_data = JSON.stringify(metadata);
       }
     }
     
-    const fields = Object.keys(filteredData);
-    const values = fields.map(key => filteredData[key]);
-    const placeholders = fields.map((_, index) => `$${index + 1}`);
-    
-    const query = `
-      INSERT INTO form_submissions (${fields.join(', ')})
-      VALUES (${placeholders.join(', ')})
-      RETURNING submission_id
-    `;
-    
-    console.log('📝 Inserting data:', { fields, values });
-    const result = await dbService.query(query, values);
-    return result.rows[0].submission_id;
+    console.log('📝 Inserting data into sheets:', { certificateType, fullName: data.full_name });
+    const result = await sheetsDb.insertFormSubmission(data, certificateType);
+    return result.id;
     
   } catch (error) {
-    console.error('❌ Database insert error:', error);
+    console.error('❌ Sheets insert error:', error);
     console.error('❌ Error details:', error.message);
     throw error;
   }
@@ -275,62 +250,26 @@ router.get('/', async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;
     const status = req.query.status;
-    const certificateType = req.query.type;
-    const offset = (page - 1) * limit;
+    const certificateType = req.query.type || 'student';
+    const search = req.query.search;
 
-    let whereClause = '';
-    let params = [];
-    let paramIndex = 1;
+    console.log('📋 Fetching form submissions:', { page, limit, status, certificateType, search });
 
-    if (status) {
-      whereClause += ` WHERE status = $${paramIndex}`;
-      params.push(status);
-      paramIndex++;
-    }
-
-    if (certificateType) {
-      whereClause += whereClause ? ` AND certificate_type = $${paramIndex}` : ` WHERE certificate_type = $${paramIndex}`;
-      params.push(certificateType);
-      paramIndex++;
-    }
-
-    const query = `
-      SELECT 
-        submission_id,
-        full_name,
-        email_address,
-        phone,
-        course_name,
-        batch_initials,
-        certificate_type,
-        status,
-        gpa,
-        attendance_percentage,
-        created_at,
-        updated_at
-      FROM form_submissions
-      ${whereClause}
-      ORDER BY created_at DESC
-      LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
-    `;
-
-    params.push(limit, offset);
-
-    const countQuery = `SELECT COUNT(*) as total FROM form_submissions ${whereClause}`;
-    const countParams = params.slice(0, -2); // Remove limit and offset
-
-    const [submissions, countResult] = await Promise.all([
-      dbService.query(query, params),
-      dbService.query(countQuery, countParams)
-    ]);
+    const result = await sheetsDb.getSubmissions({
+      certificateType,
+      page,
+      limit,
+      status,
+      search
+    });
 
     res.json({
-      submissions: submissions.rows,
+      submissions: result.data,
       pagination: {
-        page,
-        limit,
-        total: parseInt(countResult.rows[0].total),
-        pages: Math.ceil(countResult.rows[0].total / limit)
+        page: result.page,
+        limit: result.limit,
+        total: result.total,
+        pages: result.totalPages
       }
     });
 
@@ -345,18 +284,14 @@ router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
     
-    const query = `
-      SELECT * FROM form_submissions 
-      WHERE submission_id = $1
-    `;
+    console.log('📋 Fetching form submission:', id);
+    const submission = await sheetsDb.getSubmissionById(id);
     
-    const result = await dbService.query(query, [id]);
-    
-    if (result.rows.length === 0) {
+    if (!submission) {
       return res.status(404).json({ error: 'Form submission not found' });
     }
 
-    res.json(result.rows[0]);
+    res.json(submission);
 
   } catch (error) {
     console.error('❌ Error fetching form submission:', error);
@@ -374,23 +309,20 @@ router.patch('/:id/status', async (req, res) => {
       return res.status(400).json({ error: 'Invalid status' });
     }
 
-    const query = `
-      UPDATE form_submissions 
-      SET status = $1, updated_at = CURRENT_TIMESTAMP
-      WHERE submission_id = $2
-      RETURNING *
-    `;
+    console.log('📝 Updating form submission status:', id, status);
+    const updatedSubmission = await sheetsDb.updateSubmission(id, { 
+      status, 
+      updated_at: new Date().toISOString() 
+    });
     
-    const result = await dbService.query(query, [status, id]);
-    
-    if (result.rows.length === 0) {
+    if (!updatedSubmission) {
       return res.status(404).json({ error: 'Form submission not found' });
     }
 
     res.json({
       success: true,
       message: 'Status updated successfully',
-      submission: result.rows[0]
+      submission: updatedSubmission
     });
 
   } catch (error) {

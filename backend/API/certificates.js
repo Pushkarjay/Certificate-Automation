@@ -1,24 +1,17 @@
 const express = require('express');
 const router = express.Router();
-const dbService = require('../services/databaseService');
+const sheetsDb = require('../services/sheetsDatabase');
 const { generateCertificate, generateSimpleCertificate } = require('../services/certificateGenerator');
 const QRCode = require('qrcode');
-
-// Initialize database connection
-let pool;
-try {
-  pool = dbService.getPool();
-  console.log('✅ Database service initialized for certificates API');
-} catch (error) {
-  console.error('❌ Database service initialization failed:', error);
-}
 
 // Test endpoint to check API health
 router.get('/test', async (req, res) => {
   try {
+    const connectionTest = await sheetsDb.testConnection();
     res.json({ 
       status: 'OK', 
       message: 'Certificates API is working',
+      sheetsConnection: connectionTest,
       timestamp: new Date().toISOString()
     });
   } catch (error) {
@@ -26,77 +19,56 @@ router.get('/test', async (req, res) => {
   }
 });
 
-// Get all certificates with pagination (now working with form_submissions)
+// Get all certificates with pagination (now working with Google Sheets)
 router.get('/', async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;
-    const type = req.query.type; // student, trainer, trainee
+    const type = req.query.type || 'student'; // student, trainer, trainee
     const status = req.query.status; // pending, generated, issued, revoked
-    const offset = (page - 1) * limit;
+    const search = req.query.search;
 
-    let whereClause = '';
-    let params = [];
-    let paramIndex = 1;
+    console.log('📋 Fetching certificates:', { page, limit, type, status, search });
 
-    if (type) {
-      whereClause += ` WHERE fs.certificate_type = $${paramIndex}`;
-      params.push(type);
-      paramIndex++;
-    }
+    const result = await sheetsDb.getSubmissions({
+      certificateType: type,
+      page,
+      limit,
+      status,
+      search
+    });
 
-    if (status) {
-      whereClause += whereClause ? ` AND fs.status = $${paramIndex}` : ` WHERE fs.status = $${paramIndex}`;
-      params.push(status);
-      paramIndex++;
-    }
-
-    const query = `
-      SELECT 
-        fs.submission_id as id,
-        fs.submission_id,
-        fs.full_name,
-        fs.email_address as email,
-        fs.phone,
-        fs.course_name,
-        fs.batch_initials,
-        fs.certificate_type,
-        fs.status,
-        fs.gpa,
-        fs.attendance_percentage,
-        fs.assessment_score,
-        fs.organization,
-        fs.position,
-        fs.created_at,
-        fs.updated_at,
-        cg.certificate_ref_no,
-        cg.certificate_id,
-        cg.verification_url,
-        cg.generated_at
-      FROM form_submissions fs
-      LEFT JOIN certificate_generations cg ON fs.submission_id = cg.submission_id
-      ${whereClause}
-      ORDER BY fs.created_at DESC
-      LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
-    `;
-
-    params.push(limit, offset);
-
-    const countQuery = `SELECT COUNT(*) as total FROM form_submissions fs ${whereClause}`;
-    const countParams = params.slice(0, -2); // Remove limit and offset
-
-    const [certificates, countResult] = await Promise.all([
-      pool ? pool.query(query, params) : dbService.query(query, params),
-      pool ? pool.query(countQuery, countParams) : dbService.query(countQuery, countParams)
-    ]);
+    // Transform data to match expected format
+    const certificates = result.data.map(submission => ({
+      id: submission._id,
+      submission_id: submission._id,
+      full_name: submission.full_name,
+      email: submission.email_address,
+      phone: submission.phone,
+      course_name: submission.course_name,
+      batch_initials: submission.batch_initials,
+      certificate_type: submission.certificate_type,
+      status: submission.status,
+      gpa: submission.gpa,
+      attendance_percentage: submission.attendance_percentage,
+      assessment_score: submission.assessment_score,
+      organization: submission.organization,
+      position: submission.position,
+      created_at: submission.timestamp,
+      updated_at: submission.updated_at || submission.timestamp,
+      certificate_ref_no: submission.certificate_id,
+      certificate_id: submission.certificate_id,
+      verification_url: submission.certificate_url,
+      generated_at: submission.issued_date
+    }));
 
     res.json({
-      certificates: certificates.rows,
+      certificates,
       pagination: {
-        page,
-        limit,
-        total: parseInt(countResult.rows[0].total),
-        pages: Math.ceil(countResult.rows[0].total / limit)
+        page: result.page,
+        limit: result.limit,
+        total: result.total,
+        pages: result.totalPages
       }
     });
 
@@ -111,29 +83,29 @@ router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
     
-    const query = `
-      SELECT 
-        fs.*,
-        cg.certificate_ref_no,
-        cg.certificate_id,
-        cg.verification_url,
-        cg.qr_code_data,
-        cg.certificate_image_path,
-        cg.certificate_pdf_path,
-        cg.generated_at,
-        cg.status as certificate_status
-      FROM form_submissions fs
-      LEFT JOIN certificate_generations cg ON fs.submission_id = cg.submission_id
-      WHERE fs.submission_id = $1
-    `;
+    console.log('📋 Fetching certificate:', id);
+    const submission = await sheetsDb.getSubmissionById(id);
     
-    const result = await dbService.query(query, [id]);
-    
-    if (result.rows.length === 0) {
+    if (!submission) {
       return res.status(404).json({ error: 'Certificate/submission not found' });
     }
 
-    res.json(result.rows[0]);
+    // Transform to match expected format
+    const certificate = {
+      ...submission,
+      email: submission.email_address,
+      certificate_ref_no: submission.certificate_id,
+      verification_url: submission.certificate_url,
+      qr_code_data: submission.qr_code,
+      certificate_image_path: '', // These could be derived from certificate_url
+      certificate_pdf_path: submission.certificate_url,
+      generated_at: submission.issued_date,
+      certificate_status: submission.status,
+      created_at: submission.timestamp,
+      updated_at: submission.updated_at || submission.timestamp
+    };
+
+    res.json(certificate);
 
   } catch (error) {
     console.error('❌ Error fetching certificate:', error);
@@ -147,94 +119,36 @@ router.post('/generate/:id', async (req, res) => {
     const submissionId = req.params.id;
     const forceRegenerate = req.query.force === 'true' || req.body.force === true;
     
-    // Get form submission data
-    const submissionQuery = `
-      SELECT * FROM form_submissions 
-      WHERE submission_id = $1
-    `;
+    console.log('🎓 Generating certificate for submission:', submissionId);
     
-    const submissionResult = await dbService.query(submissionQuery, [submissionId]);
+    // Get form submission data from sheets
+    const submission = await sheetsDb.getSubmissionById(submissionId);
     
-    if (submissionResult.rows.length === 0) {
+    if (!submission) {
       return res.status(404).json({ 
         error: 'Form submission not found' 
       });
     }
 
-    const submission = submissionResult.rows[0];
-
-    // Initialize variables
-    let refNo;
-    let verificationUrl;
-
-    // Check if certificate already exists and has actual files
-    const existingCertQuery = `
-      SELECT certificate_ref_no, certificate_image_path, certificate_pdf_path 
-      FROM certificate_generations 
-      WHERE submission_id = $1
-    `;
-    
-    const existingResult = await dbService.query(existingCertQuery, [submissionId]);
-    
-    if (existingResult.rows.length > 0 && !forceRegenerate) {
-      const existing = existingResult.rows[0];
-      
-      // Check if actual files exist
-      const fs = require('fs').promises;
-      const path = require('path');
-      let filesExist = false;
-      
-      try {
-        if (existing.certificate_image_path && existing.certificate_pdf_path) {
-          const imgPath = path.join(__dirname, '..', existing.certificate_image_path);
-          const pdfPath = path.join(__dirname, '..', existing.certificate_pdf_path);
-          
-          await fs.access(imgPath);
-          await fs.access(pdfPath);
-          filesExist = true;
-        }
-      } catch (error) {
-        console.log(`📂 Certificate files missing for ${existing.certificate_ref_no}, allowing re-generation`);
-        filesExist = false;
-      }
-      
-      if (filesExist) {
-        return res.status(400).json({ 
-          error: 'Certificate already generated with files',
-          referenceNumber: existing.certificate_ref_no,
-          message: 'Certificate files already exist. Use force=true to regenerate.'
-        });
-      } else {
-        console.log(`🔄 Re-generating certificate ${existing.certificate_ref_no} (files missing)`);
-        // Continue with generation using existing reference number
-        refNo = existing.certificate_ref_no;
-        verificationUrl = `${process.env.VERIFICATION_BASE_URL || 'https://certificate-automation-dmoe.onrender.com/verify/'}${refNo}`;
-      }
-    } else {
-      // Generate new certificate reference number and verification URL
-      refNo = await generateCertificateRefNo(submission);
-      verificationUrl = `${process.env.VERIFICATION_BASE_URL || 'https://certificate-automation-dmoe.onrender.com/verify/'}${refNo}`;
+    // Check if certificate already exists
+    if (submission.certificate_id && submission.status === 'issued' && !forceRegenerate) {
+      return res.status(400).json({ 
+        error: 'Certificate already generated',
+        referenceNumber: submission.certificate_id,
+        verificationUrl: submission.certificate_url,
+        message: 'Certificate already exists. Use force=true to regenerate.'
+      });
     }
+
+    // Generate new certificate reference number and verification URL
+    const refNo = await generateCertificateRefNo(submission);
+    const verificationUrl = `${process.env.VERIFICATION_BASE_URL || 'https://certificate-automation-dmoe.onrender.com/verify/'}${refNo}`;
 
     // Generate QR code
-    const qrCodeData = await QRCode.toDataURL(verificationUrl || `${process.env.VERIFICATION_BASE_URL || 'https://certificate-automation-dmoe.onrender.com/verify/'}${refNo}`);
+    const qrCodeData = await QRCode.toDataURL(verificationUrl);
 
-    // Get appropriate template
-    const templateQuery = `
-      SELECT template_id, template_path 
-      FROM certificate_templates 
-      WHERE template_type = $1 AND is_active = true 
-      LIMIT 1
-    `;
-    
-    const templateResult = await dbService.query(templateQuery, [submission.certificate_type]);
-    let templateId = null;
-    let templatePath = 'G1 CC.jpg'; // Default template
-    
-    if (templateResult.rows.length > 0) {
-      templateId = templateResult.rows[0].template_id;
-      templatePath = templateResult.rows[0].template_path;
-    }
+    // Get appropriate template based on certificate type and course
+    const templatePath = getTemplateForSubmission(submission);
 
     // Generate the actual certificate files (using simplified generation)
     const certificateData = {
@@ -251,54 +165,35 @@ router.post('/generate/:id', async (req, res) => {
       endDate: submission.end_date
     };
 
+    console.log('🎨 Generating certificate with data:', { 
+      name: certificateData.name, 
+      refNo: certificateData.refNo, 
+      template: templatePath 
+    });
+
     const generatedFiles = await generateSimpleCertificate(certificateData);
 
-    // Store or update certificate generation record
-    let certResult;
-    if (existingResult.rows.length > 0) {
-      // Update existing certificate record with new file paths
-      const updateCertQuery = `
-        UPDATE certificate_generations SET
-          verification_url = $1, qr_code_data = $2,
-          certificate_image_path = $3, certificate_pdf_path = $4,
-          generated_at = CURRENT_TIMESTAMP, status = 'generated'
-        WHERE submission_id = $5
-        RETURNING certificate_id
-      `;
+    // Convert PDF to base64 for storage in sheets
+    const fs = require('fs').promises;
+    const pdfBuffer = await fs.readFile(generatedFiles.pdfPath);
+    const pdfBase64 = pdfBuffer.toString('base64');
 
-      certResult = await dbService.query(updateCertQuery, [
-        verificationUrl, qrCodeData,
-        generatedFiles.imagePath, generatedFiles.pdfPath, submissionId
-      ]);
-    } else {
-      // Insert new certificate record
-      const insertCertQuery = `
-        INSERT INTO certificate_generations (
-          submission_id, certificate_ref_no, verification_url, qr_code_data,
-          certificate_image_path, certificate_pdf_path, template_id,
-          generated_at, status
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, 'generated')
-        RETURNING certificate_id
-      `;
+    // Update the submission in sheets with certificate data
+    const certificateInfo = {
+      certificateId: refNo,
+      certificateUrl: generatedFiles.pdfUrl || verificationUrl,
+      qrCode: qrCodeData,
+      verificationCode: refNo
+    };
 
-      certResult = await dbService.query(insertCertQuery, [
-        submissionId, refNo, verificationUrl, qrCodeData,
-        generatedFiles.imagePath, generatedFiles.pdfPath, templateId
-      ]);
-    }
+    await sheetsDb.storeCertificatePDF(submissionId, pdfBase64, certificateInfo);
 
-    // Update form submission status
-    await dbService.query(
-      'UPDATE form_submissions SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE submission_id = $2',
-      ['generated', submissionId]
-    );
-
-    console.log('✅ Certificate generated successfully:', refNo);
+    console.log('✅ Certificate generated and stored successfully:', refNo);
 
     res.json({
       success: true,
       message: 'Certificate generated successfully',
-      certificateId: certResult.rows[0].certificate_id,
+      certificateId: refNo,
       referenceNumber: refNo,
       verificationUrl: verificationUrl,
       files: generatedFiles
@@ -312,27 +207,6 @@ router.post('/generate/:id', async (req, res) => {
     });
   }
 });
-
-// Generate reference number
-async function generateCertificateRefNo(submission) {
-  const year = new Date().getFullYear();
-  const type = submission.certificate_type.toUpperCase();
-  const course = (submission.course_name || 'GEN').replace(/\s+/g, '').substring(0, 4).toUpperCase();
-  const batch = (submission.batch_initials || 'B00').toUpperCase();
-  
-  // Get count of certificates for this type this year
-  const countQuery = `
-    SELECT COUNT(*) as count FROM certificate_generations cg
-    JOIN form_submissions fs ON cg.submission_id = fs.submission_id
-    WHERE fs.certificate_type = $1 
-    AND EXTRACT(YEAR FROM cg.created_at) = $2
-  `;
-  
-  const countResult = await dbService.query(countQuery, [submission.certificate_type, year]);
-  const counter = parseInt(countResult.rows[0].count) + 1;
-  
-  return `${type}_${course}_${batch}_${year}_${counter.toString().padStart(4, '0')}`;
-}
 
 // Bulk generate certificates for pending submissions
 router.post('/generate-batch', async (req, res) => {
@@ -351,28 +225,21 @@ router.post('/generate-batch', async (req, res) => {
 
     for (const submissionId of submissionIds) {
       try {
-        // Check submission status
-        const checkQuery = `
-          SELECT fs.*, cg.certificate_ref_no 
-          FROM form_submissions fs
-          LEFT JOIN certificate_generations cg ON fs.submission_id = cg.submission_id
-          WHERE fs.submission_id = $1
-        `;
+        console.log(`🔄 Processing batch generation for: ${submissionId}`);
         
-        const checkResult = await dbService.query(checkQuery, [submissionId]);
+        // Get submission from sheets
+        const submission = await sheetsDb.getSubmissionById(submissionId);
         
-        if (checkResult.rows.length === 0) {
+        if (!submission) {
           results.failed.push({ submissionId, error: 'Submission not found' });
           continue;
         }
 
-        const submission = checkResult.rows[0];
-
-        if (submission.certificate_ref_no) {
+        if (submission.certificate_id) {
           results.skipped.push({ 
             submissionId, 
             reason: 'Certificate already exists',
-            refNo: submission.certificate_ref_no 
+            refNo: submission.certificate_id 
           });
           continue;
         }
@@ -397,37 +264,31 @@ router.post('/generate-batch', async (req, res) => {
           refNo: refNo,
           verificationUrl: verificationUrl,
           type: submission.certificate_type,
-          templatePath: 'G1 CC.jpg', // Default template
+          templatePath: getTemplateForSubmission(submission),
           gpa: submission.gpa,
           attendance: submission.attendance_percentage
         };
 
         const generatedFiles = await generateSimpleCertificate(certificateData);
 
-        // Store certificate generation record
-        const insertCertQuery = `
-          INSERT INTO certificate_generations (
-            submission_id, certificate_ref_no, verification_url, qr_code_data,
-            certificate_image_path, certificate_pdf_path,
-            generated_at, status
-          ) VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP, 'generated')
-          RETURNING certificate_id
-        `;
+        // Convert PDF to base64 for storage
+        const fs = require('fs').promises;
+        const pdfBuffer = await fs.readFile(generatedFiles.pdfPath);
+        const pdfBase64 = pdfBuffer.toString('base64');
 
-        const certResult = await dbService.query(insertCertQuery, [
-          submissionId, refNo, verificationUrl, qrCodeData,
-          generatedFiles.imagePath, generatedFiles.pdfPath
-        ]);
+        // Store in sheets
+        const certificateInfo = {
+          certificateId: refNo,
+          certificateUrl: generatedFiles.pdfUrl || verificationUrl,
+          qrCode: qrCodeData,
+          verificationCode: refNo
+        };
 
-        // Update form submission status
-        await dbService.query(
-          'UPDATE form_submissions SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE submission_id = $2',
-          ['generated', submissionId]
-        );
+        await sheetsDb.storeCertificatePDF(submissionId, pdfBase64, certificateInfo);
 
         results.generated.push({
           submissionId,
-          certificateId: certResult.rows[0].certificate_id,
+          certificateId: refNo,
           referenceNumber: refNo,
           name: submission.full_name
         });
@@ -467,29 +328,10 @@ router.get('/verify/:refNo', async (req, res) => {
   try {
     const { refNo } = req.params;
     
-    const query = `
-      SELECT 
-        fs.full_name,
-        fs.email_address,
-        fs.course_name,
-        fs.batch_initials,
-        fs.certificate_type,
-        fs.gpa,
-        fs.attendance_percentage,
-        fs.start_date,
-        fs.end_date,
-        cg.certificate_ref_no,
-        cg.verification_url,
-        cg.generated_at,
-        cg.status
-      FROM certificate_generations cg
-      JOIN form_submissions fs ON cg.submission_id = fs.submission_id
-      WHERE cg.certificate_ref_no = $1
-    `;
+    console.log('🔍 Verifying certificate:', refNo);
+    const certificate = await sheetsDb.findByVerificationCode(refNo);
     
-    const result = await dbService.query(query, [refNo]);
-    
-    if (result.rows.length === 0) {
+    if (!certificate) {
       return res.status(404).json({
         valid: false,
         error: 'Certificate not found',
@@ -497,31 +339,32 @@ router.get('/verify/:refNo', async (req, res) => {
       });
     }
 
-    const cert = result.rows[0];
-
-    // Update verification count
-    await dbService.query(
-      'UPDATE certificate_generations SET verification_count = verification_count + 1, last_verified = CURRENT_TIMESTAMP WHERE certificate_ref_no = $1',
-      [refNo]
-    );
+    // Check if certificate is properly issued
+    if (certificate.status !== 'issued') {
+      return res.status(400).json({
+        valid: false,
+        error: 'Certificate not issued',
+        message: 'This certificate has not been officially issued yet.'
+      });
+    }
 
     res.json({
       valid: true,
       status: 'valid',
       message: 'Certificate is valid and authentic.',
       certificateData: {
-        referenceNumber: cert.certificate_ref_no,
-        certificateType: cert.certificate_type,
-        holderName: cert.full_name,
-        email: cert.email_address,
-        course: cert.course_name,
-        batch: cert.batch_initials,
-        gpa: cert.gpa,
-        attendance: cert.attendance_percentage,
-        startDate: cert.start_date,
-        endDate: cert.end_date,
-        issuedDate: cert.generated_at,
-        verificationUrl: cert.verification_url
+        referenceNumber: certificate.verification_code || certificate.certificate_id,
+        certificateType: certificate.certificate_type,
+        holderName: certificate.full_name,
+        email: certificate.email_address,
+        course: certificate.course_name,
+        batch: certificate.batch_initials,
+        gpa: certificate.gpa,
+        attendance: certificate.attendance_percentage,
+        startDate: certificate.start_date,
+        endDate: certificate.end_date,
+        issuedDate: certificate.issued_date,
+        verificationUrl: certificate.certificate_url
       }
     });
 
@@ -548,66 +391,55 @@ router.post('/verify/manual', async (req, res) => {
       });
     }
 
-    const query = `
-      SELECT 
-        fs.full_name,
-        fs.email_address,
-        fs.course_name,
-        fs.batch_initials,
-        fs.certificate_type,
-        fs.gpa,
-        fs.attendance_percentage,
-        fs.start_date,
-        fs.end_date,
-        cg.certificate_ref_no,
-        cg.verification_url,
-        cg.generated_at,
-        cg.status
-      FROM form_submissions fs
-      LEFT JOIN certificate_generations cg ON fs.submission_id = cg.submission_id
-      WHERE LOWER(fs.full_name) = LOWER($1) 
-      AND LOWER(fs.course_name) = LOWER($2)
-      AND LOWER(fs.email_address) = LOWER($3)
-      AND cg.certificate_ref_no IS NOT NULL
-    `;
-    
-    const result = await dbService.query(query, [holderName, course, email]);
-    
-    if (result.rows.length === 0) {
-      return res.status(404).json({
+    console.log('🔍 Manual verification search:', { holderName, course, email });
+
+    // Search across all sheet types
+    const searchPromises = ['student', 'trainer', 'trainee'].map(async (type) => {
+      const results = await sheetsDb.getSubmissions({
+        certificateType: type,
+        search: holderName,
+        limit: 100
+      });
+      
+      return results.data.filter(cert => 
+        cert.full_name?.toLowerCase().includes(holderName.toLowerCase()) &&
+        cert.course_name?.toLowerCase().includes(course.toLowerCase()) &&
+        cert.email_address?.toLowerCase() === email.toLowerCase() &&
+        cert.status === 'issued'
+      );
+    });
+
+    const searchResults = await Promise.all(searchPromises);
+    const allMatches = searchResults.flat();
+
+    if (allMatches.length === 0) {
+      return res.json({
         valid: false,
         error: 'Certificate not found',
         message: 'No certificate found matching the provided details.'
       });
     }
 
-    const cert = result.rows[0];
-
-    // Update verification count
-    if (cert.certificate_ref_no) {
-      await dbService.query(
-        'UPDATE certificate_generations SET verification_count = verification_count + 1, last_verified = CURRENT_TIMESTAMP WHERE certificate_ref_no = $1',
-        [cert.certificate_ref_no]
-      );
-    }
+    // Return the first match
+    const certificate = allMatches[0];
 
     res.json({
       valid: true,
       status: 'valid',
-      message: 'Certificate is valid and authentic.',
+      message: 'Certificate found and is valid.',
       certificateData: {
-        referenceNumber: cert.certificate_ref_no,
-        certificateType: cert.certificate_type,
-        holderName: cert.full_name,
-        email: cert.email_address,
-        course: cert.course_name,
-        batch: cert.batch_initials,
-        gpa: cert.gpa,
-        attendance: cert.attendance_percentage,
-        startDate: cert.start_date,
-        endDate: cert.end_date,
-        issuedDate: cert.generated_at,
-        verificationUrl: cert.verification_url
+        referenceNumber: certificate.verification_code || certificate.certificate_id,
+        certificateType: certificate.certificate_type,
+        holderName: certificate.full_name,
+        email: certificate.email_address,
+        course: certificate.course_name,
+        batch: certificate.batch_initials,
+        gpa: certificate.gpa,
+        attendance: certificate.attendance_percentage,
+        startDate: certificate.start_date,
+        endDate: certificate.end_date,
+        issuedDate: certificate.issued_date,
+        verificationUrl: certificate.certificate_url
       }
     });
 
@@ -616,7 +448,7 @@ router.post('/verify/manual', async (req, res) => {
     res.status(500).json({
       valid: false,
       error: 'Verification failed',
-      message: 'An error occurred while verifying the certificate.'
+      message: 'An error occurred while searching for the certificate.'
     });
   }
 });
@@ -624,282 +456,92 @@ router.post('/verify/manual', async (req, res) => {
 // Revoke certificate
 router.post('/revoke/:id', async (req, res) => {
   try {
-    const submissionId = req.params.id;
-    const { reason, revokedBy } = req.body;
+    const { id } = req.params;
+    const { reason } = req.body;
     
-    console.log(`🔄 Attempting to revoke certificate for submission ID: ${submissionId}`);
+    console.log('🚫 Revoking certificate:', id);
     
-    // Check if the certificate exists and is in a revokable state
-    const checkQuery = `
-      SELECT submission_id, full_name, email_address, status
-      FROM form_submissions 
-      WHERE submission_id = $1
-    `;
-    
-    const checkResult = await (pool ? pool.query(checkQuery, [submissionId]) : dbService.query(checkQuery, [submissionId]));
-    
-    if (checkResult.rows.length === 0) {
-      return res.status(404).json({ 
-        error: 'Certificate not found',
-        message: 'No certificate found with the provided ID.' 
-      });
-    }
-    
-    const submission = checkResult.rows[0];
-    
-    // Check if certificate can be revoked (must be generated or issued)
-    if (!['generated', 'issued'].includes(submission.status)) {
-      return res.status(400).json({
-        error: 'Cannot revoke certificate',
-        message: `Certificate with status '${submission.status}' cannot be revoked. Only generated or issued certificates can be revoked.`
-      });
-    }
-    
-    // Check if already revoked
-    if (submission.status === 'revoked') {
-      return res.status(400).json({
-        error: 'Certificate already revoked',
-        message: 'This certificate has already been revoked.'
-      });
-    }
-
-    // Get certificate generation details for reference
-    const certGenQuery = `
-      SELECT certificate_ref_no, certificate_id 
-      FROM certificate_generations 
-      WHERE submission_id = $1
-    `;
-    
-    const certGenResult = await (pool ? pool.query(certGenQuery, [submissionId]) : dbService.query(certGenQuery, [submissionId]));
-    
-    let certificateRefNo = null;
-    let certificateId = null;
-    if (certGenResult.rows.length > 0) {
-      certificateRefNo = certGenResult.rows[0].certificate_ref_no;
-      certificateId = certGenResult.rows[0].certificate_id;
-    }
-    
-    // Update the submission status to revoked
-    const revokeSubmissionQuery = `
-      UPDATE form_submissions 
-      SET 
-        status = 'revoked',
-        revoked_at = CURRENT_TIMESTAMP,
-        revocation_reason = $2,
-        revoked_by = $3,
-        updated_at = CURRENT_TIMESTAMP
-      WHERE submission_id = $1
-      RETURNING submission_id, full_name, email_address, status, revoked_at, revocation_reason, revoked_by
-    `;
-    
-    const revokeSubmissionParams = [
-      submissionId,
-      reason || 'Revoked by administrator',
-      revokedBy || 'admin'
-    ];
-    
-    const revokeSubmissionResult = await (pool ? pool.query(revokeSubmissionQuery, revokeSubmissionParams) : dbService.query(revokeSubmissionQuery, revokeSubmissionParams));
-    
-    if (revokeSubmissionResult.rows.length === 0) {
-      return res.status(500).json({
-        error: 'Failed to revoke certificate submission',
-        message: 'Certificate submission revocation failed due to database error.'
-      });
-    }
-
-    // Also update the certificate generation status if it exists
-    if (certificateId) {
-      const revokeCertGenQuery = `
-        UPDATE certificate_generations 
-        SET 
-          status = 'revoked',
-          updated_at = CURRENT_TIMESTAMP
-        WHERE certificate_id = $1
-      `;
-      
-      await (pool ? pool.query(revokeCertGenQuery, [certificateId]) : dbService.query(revokeCertGenQuery, [certificateId]));
-    }
-    
-    const revokedSubmission = revokeSubmissionResult.rows[0];
-
-    console.log(`✅ Certificate revoked successfully:`, {
-      id: submissionId,
-      name: revokedSubmission.full_name,
-      refNo: certificateRefNo,
-      reason: reason
+    const updatedSubmission = await sheetsDb.updateSubmission(id, {
+      status: 'revoked',
+      revocation_reason: reason || 'No reason provided',
+      revoked_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
     });
 
-    // Return success response
+    if (!updatedSubmission) {
+      return res.status(404).json({ error: 'Certificate not found' });
+    }
+
     res.json({
       success: true,
       message: 'Certificate revoked successfully',
-      certificate: {
-        id: revokedSubmission.submission_id,
-        certificate_ref_no: certificateRefNo,
-        full_name: revokedSubmission.full_name,
-        email: revokedSubmission.email_address,
-        status: revokedSubmission.status,
-        revoked_at: revokedSubmission.revoked_at,
-        revocation_reason: revokedSubmission.revocation_reason,
-        revoked_by: revokedSubmission.revoked_by
-      }
+      certificateId: updatedSubmission.certificate_id,
+      reason: reason
     });
 
   } catch (error) {
     console.error('❌ Error revoking certificate:', error);
     res.status(500).json({ 
-      error: 'Internal server error',
-      message: 'Failed to revoke certificate. Please try again later.',
-      details: error.message 
+      error: 'Failed to revoke certificate',
+      message: error.message 
     });
   }
 });
 
-// Test QR code generation endpoint
-router.get('/test-qr/:text?', async (req, res) => {
-  try {
-    const testText = req.params.text || 'https://certificate-automation-dmoe.onrender.com/verify/TEST_123';
-    
-    console.log('🔄 Testing QR code generation for:', testText);
-    
-    // Test basic QR code generation
-    const qrDataURL = await QRCode.toDataURL(testText, {
-      width: 200,
-      margin: 2,
-      color: {
-        dark: '#000000',
-        light: '#FFFFFF'
-      },
-      errorCorrectionLevel: 'M'
-    });
-    
-    // Test buffer generation
-    const qrBuffer = await QRCode.toBuffer(testText, {
-      width: 150,
-      margin: 1,
-      color: {
-        dark: '#000000',
-        light: '#FFFFFF'
-      },
-      errorCorrectionLevel: 'M',
-      type: 'png'
-    });
-    
-    console.log('✅ QR code generation test successful');
-    
-    res.json({
-      success: true,
-      message: 'QR code generation working',
-      qrDataURL: qrDataURL,
-      bufferSize: qrBuffer.length,
-      testText: testText,
-      qrCodeStats: {
-        dataURLLength: qrDataURL.length,
-        bufferLength: qrBuffer.length,
-        timestamp: new Date().toISOString()
-      }
-    });
-    
-  } catch (error) {
-    console.error('❌ QR code generation test failed:', error);
-    res.status(500).json({
-      success: false,
-      error: 'QR code generation failed',
-      message: error.message,
-      stack: error.stack
-    });
-  }
-});
+// Helper function to get template for submission
+function getTemplateForSubmission(submission) {
+  const courseMap = {
+    'cloud computing': 'CC.jpg',
+    'java': 'G12 Java.jpg',
+    'python': 'G28 Python.jpg',
+    'vlsi': 'G16 VLSI.jpg',
+    'autocad': 'Autocad.jpg',
+    'data structures': 'DSA.jpg',
+    'robotics': 'ROBOTICS.jpg',
+    'sap fico': 'SAP FICO.jpg'
+  };
 
-// Test revocation functionality
-router.get('/test-revoke/:id?', async (req, res) => {
-  try {
-    const testId = req.params.id || '1';
-    
-    console.log('🔄 Testing revocation functionality for ID:', testId);
-    
-    // Test database connection
-    const testQuery = `SELECT submission_id, full_name, status FROM form_submissions LIMIT 5`;
-    const testResult = await (pool ? pool.query(testQuery) : dbService.query(testQuery));
-    
-    console.log('✅ Database connection test successful');
-    
-    res.json({
-      success: true,
-      message: 'Revocation functionality test',
-      databaseStatus: 'Connected',
-      sampleRecords: testResult.rows.length,
-      availableCertificates: testResult.rows.map(row => ({
-        id: row.submission_id,
-        name: row.full_name,
-        status: row.status
-      })),
-      instructions: {
-        revoke: `POST /api/certificates/revoke/${testId}`,
-        payload: {
-          reason: 'Test revocation',
-          revokedBy: 'admin'
-        }
-      }
-    });
-    
-  } catch (error) {
-    console.error('❌ Revocation test failed:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Revocation test failed',
-      message: error.message,
-      databaseStatus: 'Error'
-    });
+  const courseLower = (submission.course_name || '').toLowerCase();
+  
+  // Try to find a matching template
+  for (const [keyword, template] of Object.entries(courseMap)) {
+    if (courseLower.includes(keyword)) {
+      return template;
+    }
   }
-});
 
-// Direct certificate generation endpoint (for testing and API usage)
-router.post('/generate-direct', async (req, res) => {
-  try {
-    console.log('🔄 Direct certificate generation request received');
-    console.log('📝 Request body:', req.body);
-    
-    const certificateData = {
-      name: req.body.full_name || req.body.name,
-      course: req.body.course_name || req.body.course,
-      batch: req.body.batch_initials || req.body.batch,
-      type: req.body.certificate_type || 'completion',
-      startDate: req.body.start_date,
-      endDate: req.body.end_date,
-      gpa: req.body.gpa || '8.5'
-    };
-    
-    console.log('🎯 Processed certificate data:', certificateData);
-    
-    // Generate certificate using our enhanced system
-    const result = await generateSimpleCertificate(certificateData);
-    
-    console.log('✅ Certificate generation completed');
-    
-    // Return comprehensive response with QR code data
-    res.json({
-      success: true,
-      message: 'Certificate generated successfully via direct API',
-      certificateData: result.certificateData,
-      paths: {
-        imagePath: result.imagePath,
-        pdfPath: result.pdfPath
-      },
-      qrCodeData: result.certificateData.qrCodeData,
-      verificationUrl: result.certificateData.verificationUrl,
-      referenceNumber: result.certificateData.referenceNumber,
-      timestamp: new Date().toISOString()
-    });
-    
-  } catch (error) {
-    console.error('❌ Direct certificate generation failed:', error);
-    res.status(500).json({
-      error: 'Certificate generation failed',
-      message: error.message,
-      timestamp: new Date().toISOString()
-    });
+  // Default based on certificate type
+  switch (submission.certificate_type) {
+    case 'trainer':
+      return 'G12 Java.jpg'; // Default trainer template
+    case 'trainee':
+      return 'G13 JAVA.jpg'; // Default trainee template  
+    default:
+      return 'CC.jpg'; // Default student template
   }
-});
+}
+
+// Generate reference number (sheets-based)
+async function generateCertificateRefNo(submission) {
+  const year = new Date().getFullYear();
+  const type = submission.certificate_type.toUpperCase();
+  const course = (submission.course_name || 'GEN').replace(/\s+/g, '').substring(0, 4).toUpperCase();
+  const batch = (submission.batch_initials || 'B00').toUpperCase();
+  
+  // Get count of certificates for this type this year from sheets
+  let counter = 1;
+  try {
+    const stats = await sheetsDb.getStats();
+    const typeStats = stats[submission.certificate_type];
+    if (typeStats) {
+      counter = (typeStats.issued || 0) + 1;
+    }
+  } catch (error) {
+    console.log('⚠️ Could not get certificate count, using default counter');
+    counter = Math.floor(Math.random() * 1000) + 1; // Fallback to random number
+  }
+  
+  return `${type}_${course}_${batch}_${year}_${counter.toString().padStart(4, '0')}`;
+}
 
 module.exports = router;

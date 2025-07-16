@@ -1,14 +1,16 @@
 const express = require('express');
 const router = express.Router();
-const dbService = require('../services/databaseService');
+const sheetsDb = require('../services/sheetsDatabase');
 
 // Verify certificate by reference number
 router.get('/:refNo', async (req, res) => {
   try {
     const { refNo } = req.params;
     
-    // Search in all certificate tables
-    const certificateData = await findCertificateByRefNo(refNo);
+    console.log('🔍 Verifying certificate:', refNo);
+    
+    // Search across all sheets for the certificate
+    const certificateData = await sheetsDb.findByVerificationCode(refNo);
     
     if (!certificateData) {
       return res.status(404).json({
@@ -25,10 +27,10 @@ router.get('/:refNo', async (req, res) => {
         status: 'revoked',
         message: 'This certificate has been revoked.',
         certificateData: {
-          referenceNumber: certificateData.certificate_ref_no,
+          referenceNumber: certificateData.verification_code || certificateData.certificate_id,
           holderName: certificateData.full_name,
           course: certificateData.course_name,
-          issuedDate: certificateData.generated_at
+          issuedDate: certificateData.issued_date
         }
       });
     }
@@ -40,7 +42,7 @@ router.get('/:refNo', async (req, res) => {
         status: 'pending',
         message: 'This certificate is still being processed.',
         certificateData: {
-          referenceNumber: certificateData.certificate_ref_no,
+          referenceNumber: certificateData.verification_code || certificateData.certificate_id,
           holderName: certificateData.full_name,
           course: certificateData.course_name
         }
@@ -53,10 +55,10 @@ router.get('/:refNo', async (req, res) => {
       status: 'valid',
       message: 'Certificate is valid and authentic.',
       certificateData: {
-        referenceNumber: certificateData.certificate_ref_no,
-        certificateType: certificateData.cert_type,
+        referenceNumber: certificateData.verification_code || certificateData.certificate_id,
+        certificateType: certificateData.certificate_type,
         holderName: certificateData.full_name,
-        email: certificateData.email,
+        email: certificateData.email_address,
         course: certificateData.course_name,
         batch: certificateData.batch_name,
         batchInitials: certificateData.batch_initials,
@@ -69,8 +71,8 @@ router.get('/:refNo', async (req, res) => {
         assessmentScore: certificateData.assessment_score,
         organization: certificateData.organization,
         position: certificateData.position,
-        issuedDate: certificateData.generated_at,
-        verificationUrl: certificateData.verification_url,
+        issuedDate: certificateData.issued_date,
+        verificationUrl: certificateData.certificate_url,
         templateUsed: certificateData.template_name
       }
     });
@@ -88,64 +90,26 @@ router.get('/:refNo', async (req, res) => {
 // Get verification statistics
 router.get('/stats/overview', async (req, res) => {
   try {
-    const statsResult = await dbService.query(`
-      SELECT 
-        'generated' as type,
-        COUNT(*) as total,
-        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
-        SUM(CASE WHEN status = 'generated' THEN 1 ELSE 0 END) as generated,
-        SUM(CASE WHEN status = 'issued' THEN 1 ELSE 0 END) as issued,
-        SUM(CASE WHEN status = 'revoked' THEN 1 ELSE 0 END) as revoked
-      FROM certificate_generations
-      UNION ALL
-      SELECT 
-        'student' as type,
-        COUNT(*) as total,
-        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
-        SUM(CASE WHEN status = 'generated' THEN 1 ELSE 0 END) as generated,
-        SUM(CASE WHEN status = 'issued' THEN 1 ELSE 0 END) as issued,
-        SUM(CASE WHEN status = 'revoked' THEN 1 ELSE 0 END) as revoked
-      FROM student_certificates
-      UNION ALL
-      SELECT 
-        'trainer' as type,
-        COUNT(*) as total,
-        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
-        SUM(CASE WHEN status = 'generated' THEN 1 ELSE 0 END) as generated,
-        SUM(CASE WHEN status = 'issued' THEN 1 ELSE 0 END) as issued,
-        SUM(CASE WHEN status = 'revoked' THEN 1 ELSE 0 END) as revoked
-      FROM trainer_certificates
-      UNION ALL
-      SELECT 
-        'trainee' as type,
-        COUNT(*) as total,
-        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
-        SUM(CASE WHEN status = 'generated' THEN 1 ELSE 0 END) as generated,
-        SUM(CASE WHEN status = 'issued' THEN 1 ELSE 0 END) as issued,
-        SUM(CASE WHEN status = 'revoked' THEN 1 ELSE 0 END) as revoked
-      FROM trainee_certificates
-    `);
-
-    const stats = statsResult.rows;
-
-    // Calculate totals
-    const totals = stats.reduce((acc, row) => {
-      acc.total += row.total;
-      acc.pending += row.pending;
-      acc.generated += row.generated;
-      acc.issued += row.issued;
-      acc.revoked += row.revoked;
-      return acc;
-    }, { total: 0, pending: 0, generated: 0, issued: 0, revoked: 0 });
-
+    console.log('📊 Getting verification statistics...');
+    const stats = await sheetsDb.getStats();
+    
     res.json({
-      overview: totals,
-      byType: stats
+      success: true,
+      statistics: stats,
+      summary: {
+        totalCertificates: Object.values(stats).reduce((sum, stat) => sum + stat.total, 0),
+        totalPending: Object.values(stats).reduce((sum, stat) => sum + stat.pending, 0),
+        totalIssued: Object.values(stats).reduce((sum, stat) => sum + stat.issued, 0),
+        totalRevoked: Object.values(stats).reduce((sum, stat) => sum + stat.revoked, 0)
+      }
     });
 
   } catch (error) {
-    console.error('❌ Error fetching verification stats:', error);
-    res.status(500).json({ error: 'Failed to fetch verification statistics' });
+    console.error('❌ Error getting verification statistics:', error);
+    res.status(500).json({
+      error: 'Failed to get statistics',
+      message: error.message
+    });
   }
 });
 
@@ -153,33 +117,47 @@ router.get('/stats/overview', async (req, res) => {
 router.get('/search/:query', async (req, res) => {
   try {
     const { query } = req.params;
-    const searchTerm = `%${query}%`;
-
-    const searchResult = await dbService.query(`
-      SELECT 'generated' as cert_type, cg.certificate_id, cg.certificate_ref_no, fs.full_name, fs.email, cg.status, cg.generated_at
-      FROM certificate_generations cg
-      JOIN form_submissions fs ON cg.submission_id = fs.submission_id
-      WHERE fs.full_name ILIKE $1 OR fs.email ILIKE $2
-      UNION ALL
-      SELECT 'student' as cert_type, certificate_id, certificate_ref_no, full_name, email, status, generated_at
-      FROM student_certificates 
-      WHERE full_name ILIKE $3 OR email ILIKE $4
-      UNION ALL
-      SELECT 'trainer' as cert_type, certificate_id, certificate_ref_no, full_name, email, status, generated_at
-      FROM trainer_certificates 
-      WHERE full_name ILIKE $5 OR email ILIKE $6
-      UNION ALL
-      SELECT 'trainee' as cert_type, certificate_id, certificate_ref_no, full_name, email, status, generated_at
-      FROM trainee_certificates 
-      WHERE full_name ILIKE $7 OR email ILIKE $8
-      ORDER BY generated_at DESC
-      LIMIT 50
-    `, [searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm]);
-
+    
+    console.log('🔍 Searching certificates for:', query);
+    
+    const searchResults = [];
+    
+    // Search across all certificate types
+    for (const certificateType of ['student', 'trainer', 'trainee']) {
+      try {
+        const results = await sheetsDb.getSubmissions({
+          certificateType,
+          search: query,
+          limit: 20 // Limit per type
+        });
+        
+        // Transform results to match expected format
+        const transformedResults = results.data.map(cert => ({
+          cert_type: certificateType,
+          certificate_id: cert._id,
+          certificate_ref_no: cert.verification_code || cert.certificate_id,
+          full_name: cert.full_name,
+          email: cert.email_address,
+          status: cert.status,
+          generated_at: cert.issued_date || cert.timestamp
+        }));
+        
+        searchResults.push(...transformedResults);
+      } catch (error) {
+        console.error(`Error searching ${certificateType} certificates:`, error.message);
+      }
+    }
+    
+    // Sort by date (newest first)
+    searchResults.sort((a, b) => new Date(b.generated_at) - new Date(a.generated_at));
+    
+    // Limit total results
+    const limitedResults = searchResults.slice(0, 50);
+    
     res.json({
       query,
-      results: searchResult.rows,
-      count: searchResult.rows.length
+      results: limitedResults,
+      count: limitedResults.length
     });
 
   } catch (error) {
@@ -187,77 +165,5 @@ router.get('/search/:query', async (req, res) => {
     res.status(500).json({ error: 'Search failed' });
   }
 });
-
-// Helper function to find certificate by reference number
-async function findCertificateByRefNo(refNo) {
-  // First, search in the new certificate_generations table (production certificates)
-  const generationResult = await dbService.query(`
-    SELECT 
-      'generated' as cert_type, 
-      cg.certificate_ref_no,
-      cg.status,
-      cg.generated_at,
-      cg.is_verified,
-      fs.full_name,
-      c.course_name,
-      b.batch_name,
-      b.batch_initials,
-      ct.template_name
-    FROM certificate_generations cg
-    JOIN form_submissions fs ON cg.submission_id = fs.submission_id
-    JOIN courses c ON cg.course_id = c.course_id
-    JOIN batches b ON cg.batch_id = b.batch_id
-    JOIN certificate_templates ct ON cg.template_id = ct.template_id
-    WHERE cg.certificate_ref_no = $1
-  `, [refNo]);
-
-  if (generationResult.rows.length > 0) {
-    return generationResult.rows[0];
-  }
-
-  // Search in student certificates (legacy)
-  const studentResult = await dbService.query(`
-    SELECT 'student' as cert_type, sc.*, c.course_name, b.batch_name, b.batch_initials, ct.template_name
-    FROM student_certificates sc
-    JOIN courses c ON sc.course_id = c.course_id
-    JOIN batches b ON sc.batch_id = b.batch_id
-    JOIN certificate_templates ct ON sc.template_id = ct.template_id
-    WHERE sc.certificate_ref_no = $1
-  `, [refNo]);
-
-  if (studentResult.rows.length > 0) {
-    return studentResult.rows[0];
-  }
-
-  // Search in trainer certificates (legacy)
-  const trainerResult = await dbService.query(`
-    SELECT 'trainer' as cert_type, tc.*, c.course_name, b.batch_name, b.batch_initials, ct.template_name
-    FROM trainer_certificates tc
-    JOIN courses c ON tc.course_id = c.course_id
-    JOIN batches b ON tc.batch_id = b.batch_id
-    JOIN certificate_templates ct ON tc.template_id = ct.template_id
-    WHERE tc.certificate_ref_no = $1
-  `, [refNo]);
-
-  if (trainerResult.rows.length > 0) {
-    return trainerResult.rows[0];
-  }
-
-  // Search in trainee certificates (legacy)
-  const traineeResult = await dbService.query(`
-    SELECT 'trainee' as cert_type, tc.*, c.course_name, b.batch_name, b.batch_initials, ct.template_name
-    FROM trainee_certificates tc
-    JOIN courses c ON tc.course_id = c.course_id
-    JOIN batches b ON tc.batch_id = b.batch_id
-    JOIN certificate_templates ct ON tc.template_id = ct.template_id
-    WHERE tc.certificate_ref_no = $1
-  `, [refNo]);
-
-  if (traineeResult.rows.length > 0) {
-    return traineeResult.rows[0];
-  }
-
-  return null;
-}
 
 module.exports = router;

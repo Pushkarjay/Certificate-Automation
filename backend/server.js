@@ -4,7 +4,7 @@ const dotenv = require('dotenv');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const path = require('path');
-const dbService = require('./services/databaseService');
+const sheetsDb = require('./services/sheetsDatabase');
 const performanceMonitor = require('./services/performanceMonitor');
 
 // Load environment variables
@@ -146,17 +146,21 @@ performanceMonitor.on('performanceAlert', (alert) => {
   // In production, you might want to send this to a monitoring service
 });
 
-// Database connection test
+// Google Sheets Database connection test
 async function testConnection() {
-  const isConnected = await dbService.testConnection();
+  console.log('🔄 Testing Google Sheets Database connection...');
+  const isConnected = await sheetsDb.testConnection();
   if (!isConnected) {
-    console.error('❌ Failed to connect to database. Check your configuration.');
+    console.error('❌ Failed to connect to Google Sheets Database. Check your configuration.');
+    console.error('📝 Make sure GOOGLE_SERVICE_ACCOUNT_KEY environment variable is set');
     // process.exit(1); // Commented out for debugging
+  } else {
+    console.log('✅ Google Sheets Database connected successfully');
   }
 }
 
-// Database-served certificate files (replaces static file serving)
-// Certificates are now served from PostgreSQL database via API
+// Google Sheets-served certificate files (replaces database file serving)
+// Certificates are now stored as base64 data in Google Sheets
 app.get('/certificates/pdf/:refNo.pdf', (req, res) => {
   res.redirect(`/api/certificate-files/${req.params.refNo}/pdf`);
 });
@@ -178,15 +182,19 @@ app.get('/api/performance', (req, res) => {
 });
 
 // Health check endpoint (SRS requirement)
-app.get('/health', (req, res) => {
+app.get('/health', async (req, res) => {
   const health = performanceMonitor.getSystemHealth();
+  const sheetsConnected = await sheetsDb.testConnection();
+  
   res.json({
     status: 'OK',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
     system: health,
-    database: dbService.dbType,
-    version: '1.0.0'
+    database: 'Google Sheets',
+    sheetsConnection: sheetsConnected,
+    version: '2.0.0',
+    features: ['Google Sheets Database', 'Certificate Generation', 'Multi-Form Support']
   });
 });
 
@@ -259,4 +267,4 @@ app.listen(PORT, async () => {
 });
 
 // Export for testing
-module.exports = { app, dbService, performanceMonitor };
+module.exports = { app, sheetsDb, performanceMonitor };

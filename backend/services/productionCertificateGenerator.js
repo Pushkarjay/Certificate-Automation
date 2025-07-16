@@ -7,7 +7,7 @@ const PDFDocument = require('pdfkit');
 const path = require('path');
 const fs = require('fs').promises;
 const QRCode = require('qrcode');
-const certificateStorage = require('./certificateStorageService');
+const sheetsDb = require('./sheetsDatabase');
 
 // Environment detection
 let canvasAvailable = false;
@@ -67,16 +67,32 @@ async function generateProductionCertificate(certificateData) {
     );
     
     // Store certificate PDF in database
-    console.log('💾 Storing certificate PDF in database...');
-    const storageSuccess = await certificateStorage.storeCertificateFromFiles(
-      refNo,
-      result.pdfPath ? path.join(__dirname, '..', result.pdfPath) : null
-    );
+    console.log('💾 Storing certificate PDF in Google Sheets...');
+    let storageSuccess = false;
+    
+    if (result.pdfPath) {
+      try {
+        const fs = require('fs');
+        const pdfBuffer = fs.readFileSync(path.join(__dirname, '..', result.pdfPath));
+        const pdfBase64 = pdfBuffer.toString('base64');
+        
+        await sheetsDb.storeCertificatePDF(refNo, pdfBase64, {
+          holder_name: processedData.fullName,
+          course_name: processedData.courseName,
+          issue_date: new Date().toISOString().split('T')[0]
+        });
+        
+        storageSuccess = true;
+      } catch (storageError) {
+        console.error('Storage error:', storageError);
+        storageSuccess = false;
+      }
+    }
     
     if (storageSuccess) {
-      console.log('✅ Certificate files stored in database successfully');
+      console.log('✅ Certificate files stored in Google Sheets successfully');
     } else {
-      console.warn('⚠️ Failed to store certificate files in database');
+      console.warn('⚠️ Failed to store certificate files in Google Sheets');
     }
     
     console.log('✅ Production certificate generated successfully');
