@@ -8,11 +8,46 @@ const path = require('path');
  */
 function getGoogleCredentials() {
   try {
-    // Check for base64 encoded key in environment variable (works for both dev and prod)
+    // Development: Read from local file first (highest priority)
+    const credentialsPaths = [
+      path.join(__dirname, '..', '..', 'sure-trust-1-1a35a986a881.json')
+    ];
+    
+    for (const credPath of credentialsPaths) {
+      if (fs.existsSync(credPath)) {
+        console.log('🔑 Loading Google credentials from local file...');
+        const credentialsContent = fs.readFileSync(credPath, 'utf8');
+        const credentials = JSON.parse(credentialsContent);
+        
+        // Ensure private key is properly formatted
+        if (credentials.private_key) {
+          credentials.private_key = credentials.private_key
+            .replace(/\\n/g, '\n')
+            .replace(/\r\n/g, '\n')
+            .replace(/\r/g, '\n')
+            .trim();
+        }
+        
+        return credentials;
+      }
+    }
+    
+    // Check for base64 encoded key in environment variable
     if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY_BASE64) {
       console.log('🔑 Loading Google credentials from environment variable (base64)...');
       const decodedKey = Buffer.from(process.env.GOOGLE_SERVICE_ACCOUNT_KEY_BASE64, 'base64').toString('utf8');
-      return JSON.parse(decodedKey);
+      const credentials = JSON.parse(decodedKey);
+      
+      // Fix private key formatting issues (Windows line endings, extra escaping)
+      if (credentials.private_key) {
+        credentials.private_key = credentials.private_key
+          .replace(/\\n/g, '\n')  // Replace escaped newlines
+          .replace(/\r\n/g, '\n') // Replace Windows line endings
+          .replace(/\r/g, '\n')   // Replace remaining carriage returns
+          .trim();
+      }
+      
+      return credentials;
     }
     
     // Production: Read from environment variable (non-base64)
@@ -20,23 +55,6 @@ function getGoogleCredentials() {
       console.log('🔑 Loading Google credentials from environment variable...');
       const decodedKey = Buffer.from(process.env.GOOGLE_SERVICE_ACCOUNT_KEY, 'base64').toString('utf8');
       return JSON.parse(decodedKey);
-    }
-    
-    // Development: Read from local file
-    const credentialsPaths = [
-      path.join(__dirname, '..', '..', 'sure-trust-1-service-account.json'),
-      path.join(__dirname, '..', '..', 'sure-trust-1-1a35a986a881.json'),
-      path.join(__dirname, '..', '..', 'opportune-sylph-458214-b8-490493912c83.json'),
-      path.join(__dirname, '..', '..', 'opportune-sylph-458214-b8-74a78b125fe6.json'),
-      path.join(__dirname, '..', '..', 'confidential-templates', 'opportune-sylph-458214-b8-74a78b125fe6.json')
-    ];
-    
-    for (const credPath of credentialsPaths) {
-      if (fs.existsSync(credPath)) {
-        console.log('🔑 Loading Google credentials from local file...');
-        const credentialsContent = fs.readFileSync(credPath, 'utf8');
-        return JSON.parse(credentialsContent);
-      }
     }
     
     throw new Error('Google Service Account credentials not found');

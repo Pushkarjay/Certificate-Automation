@@ -175,11 +175,7 @@
             </select>
             
             <button id="refreshBtn">🔄 Refresh</button>
-            <button id="forceRefreshBtn" style="background: #dc3545; color: white;">🔄 Force Refresh</button>
             <button id="generateAllBtn" class="generate">⚡ Generate All Pending</button>
-            <button id="syncFormsBtn" style="background: #17a2b8; color: white;">📥 Sync Google Forms</button>
-            <button id="testGoogleSheetsBtn" style="background: #6f42c1; color: white;">🔧 Test Google Sheets</button>
-            <button id="testAPIBtn" style="background: #ffc107; color: #000;">🔧 Test API</button>
         </div>
         
         <div id="message"></div>
@@ -195,17 +191,22 @@
             const hostname = window.location.hostname;
             const port = window.location.port;
             
-            // If served from backend (localhost:3000 or render), use relative path
+            // If served from backend (localhost:3000), use relative path
             if (hostname === 'localhost' && port === '3000') {
                 return '/api';
             }
             
             // If served from render backend, use relative path
-            if (hostname.includes('certificate-automation-dmoe.onrender.com')) {
+            if (hostname.includes('render.com')) {
                 return '/api';
             }
             
-            // For local development or file:// access, use production API
+            // For local development (file:// or localhost without backend), use localhost backend
+            if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '') {
+                return 'http://localhost:3000/api';
+            }
+            
+            // Fallback to production API
             return 'https://certificate-automation-dmoe.onrender.com/api';
         })();
         
@@ -225,14 +226,11 @@
         // Setup event listeners (fixes CSP inline handler issues)
         function setupEventListeners() {
             document.getElementById('refreshBtn').addEventListener('click', loadCertificates);
-            document.getElementById('forceRefreshBtn').addEventListener('click', forceRefresh);
             document.getElementById('generateAllBtn').addEventListener('click', generateAllPending);
-            document.getElementById('syncFormsBtn').addEventListener('click', syncGoogleForms);
-            document.getElementById('testGoogleSheetsBtn').addEventListener('click', testGoogleSheets);
-            document.getElementById('testAPIBtn').addEventListener('click', testAPI);
             
             // Status filter change listener
             document.getElementById('statusFilter').addEventListener('change', loadCertificates);
+            document.getElementById('typeFilter').addEventListener('change', loadCertificates);
         }
         
         // Update timestamp
@@ -256,9 +254,7 @@
                 console.log('Stats response status:', response.status);
                 
                 if (!response.ok) {
-                    // If admin endpoint doesn't exist, calculate stats from certificates
-                    console.log('Admin endpoint not available, calculating from certificates...');
-                    return loadStatsFromCertificates();
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
                 
                 const data = await response.json();
@@ -266,43 +262,51 @@
                 
                 const statsContainer = document.getElementById('stats');
                 
-                // Handle different response structures
-                const totalSummary = data.overview || data.summary || {
+                // Handle the new Google Sheets response structure
+                const overview = data.overview || {
+                    total: 0,
                     pending: 0,
                     generated: 0,
+                    approved: 0,
                     issued: 0,
-                    revoked: 0,
-                    total: 0
+                    rejected: 0
                 };
                 
-                console.log('Displaying stats:', totalSummary);
+                console.log('Displaying stats:', overview);
                 
                 statsContainer.innerHTML = `
                     <div class="stat-card">
-                        <div class="stat-number">${totalSummary.pending || 0}</div>
+                        <div class="stat-number">${overview.pending || 0}</div>
                         <div>Pending</div>
                     </div>
                     <div class="stat-card">
-                        <div class="stat-number">${totalSummary.generated || 0}</div>
+                        <div class="stat-number">${overview.generated || 0}</div>
                         <div>Generated</div>
                     </div>
                     <div class="stat-card">
-                        <div class="stat-number">${totalSummary.issued || 0}</div>
+                        <div class="stat-number">${overview.issued || 0}</div>
                         <div>Issued</div>
                     </div>
                     <div class="stat-card" style="background: linear-gradient(135deg, #dc3545, #c82333);">
-                        <div class="stat-number">${totalSummary.revoked || 0}</div>
-                        <div>Revoked</div>
+                        <div class="stat-number">${overview.rejected || 0}</div>
+                        <div>Rejected</div>
                     </div>
                     <div class="stat-card">
-                        <div class="stat-number">${totalSummary.total || 0}</div>
+                        <div class="stat-number">${overview.total || 0}</div>
                         <div>Total</div>
                     </div>
                 `;
             } catch (error) {
                 console.error('Error loading stats:', error);
-                // Fallback to calculating from certificates
-                loadStatsFromCertificates();
+                showMessage('Error loading statistics: ' + error.message, 'error');
+                const statsContainer = document.getElementById('stats');
+                statsContainer.innerHTML = `
+                    <div class="stat-card" style="background: #dc3545;">
+                        <div class="stat-number">!</div>
+                        <div>Error Loading Stats</div>
+                        <small>Check console for details</small>
+                    </div>
+                `;
             }
         }
         
@@ -364,26 +368,26 @@
             const typeFilter = document.getElementById('typeFilter').value;
             const statusFilter = document.getElementById('statusFilter').value;
             
-            let url = `${API_BASE}/certificates?limit=100&_t=${Date.now()}`; // Add timestamp to prevent caching
+            let url = `${API_BASE}/admin/submissions?limit=100&page=1`;
             if (typeFilter) url += `&type=${typeFilter}`;
             if (statusFilter) url += `&status=${statusFilter}`;
             
-            console.log('Loading certificates from:', url);
+            console.log('Loading submissions from:', url);
             
             try {
                 const response = await fetch(url);
-                console.log('Certificates response status:', response.status);
+                console.log('Submissions response status:', response.status);
                 
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
                 
                 const data = await response.json();
-                console.log('Certificates data:', data);
+                console.log('Submissions data:', data);
                 
                 const container = document.getElementById('certificatesContainer');
                 
-                if (data.certificates && data.certificates.length > 0) {
+                if (data.submissions && data.submissions.length > 0) {
                     container.innerHTML = `
                         <table class="certificates-table">
                             <thead>
@@ -391,47 +395,40 @@
                                     <th>Type</th>
                                     <th>Name</th>
                                     <th>Email</th>
-                                    <th>Course/Domain</th>
+                                    <th>Course</th>
                                     <th>Status</th>
-                                    <th>Reference</th>
+                                    <th>Batch</th>
                                     <th>Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                ${data.certificates.map(cert => `
+                                ${data.submissions.map(cert => `
                                     <tr>
-                                        <td>${cert.certificate_type || cert.cert_type || 'Student'}</td>
-                                        <td>${cert.full_name || cert.name || 'N/A'}</td>
-                                        <td>${cert.email || 'N/A'}</td>
-                                        <td>${cert.course_name || cert.course_domain || cert.domain || 'N/A'} ${cert.batch_initials ? `(${cert.batch_initials})` : ''}</td>
-                                        <td><span class="status ${cert.status || 'unknown'}">${cert.status || 'unknown'}</span></td>
-                                        <td>${cert.certificate_ref_no || cert.reference_number || 'Not generated'}</td>
+                                        <td>${cert.certificate_type || 'student'}</td>
+                                        <td>${cert.full_name || 'N/A'}</td>
+                                        <td>${cert.email || cert.email_address || 'N/A'}</td>
+                                        <td>${cert.course_name || 'N/A'}</td>
+                                        <td><span class="status ${cert.status || 'pending'}">${cert.status || 'pending'}</span></td>
+                                        <td>${cert.batch_initials || 'N/A'}</td>
                                         <td>
                                             ${cert.status === 'pending' ? 
-                                                `<button class="generate" data-cert-id="${cert.id}">Generate</button>` :
+                                                `<button class="generate" data-cert-id="${cert.submission_id || cert._id}">Generate</button>` :
                                                 cert.status === 'revoked' ?
+                                                    `<span style="color: #dc3545;">❌ Revoked</span>` :
+                                                (cert.verification_code || cert.certificate_id) ? 
                                                     `<div>
-                                                        <span style="color: #dc3545;">❌ Revoked</span><br>
-                                                        <small style="color: #666;">Certificate has been revoked</small>
-                                                    </div>` :
-                                                cert.verification_url ? 
-                                                    `<div>
-                                                        <a href="${cert.verification_url}" target="_blank" style="color: #28a745; text-decoration: none;">View Certificate</a><br>
-                                                        ${cert.certificate_ref_no ? 
-                                                            `<div style="margin-top: 5px;">
-                                                                <a href="/api/certificate-files/${cert.certificate_ref_no}/img" target="_blank" style="color: #007bff; font-size: 0.8em; margin-right: 8px;" class="cert-file-link">IMG</a>
-                                                                <a href="/api/certificate-files/${cert.certificate_ref_no}/pdf" target="_blank" style="color: #dc3545; font-size: 0.8em;" class="cert-file-link">PDF</a>
-                                                            </div>` : ''
-                                                        }
-                                                        <small style="color: #666;">Ref: ${cert.certificate_ref_no || 'N/A'}</small><br>
-                                                        ${(cert.status === 'generated' || cert.status === 'issued') ? 
-                                                            `<button class="revoke" data-cert-id="${cert.id}" style="background: #dc3545; color: white; font-size: 0.8em; padding: 4px 8px; margin-top: 5px; border: none; border-radius: 3px; cursor: pointer;">Revoke</button>` : ''
+                                                        <a href="/verify/${cert.verification_code || cert.certificate_id}" target="_blank" style="color: #28a745; text-decoration: none; display: block; margin-bottom: 5px;">🔗 View Certificate</a>
+                                                        <a href="${API_BASE}/certificate-files/${cert.verification_code || cert.certificate_id}/pdf" target="_blank" style="color: #007bff; text-decoration: none; display: block; margin-bottom: 5px;">📄 Download PDF</a>
+                                                        <small style="color: #666; display: block; margin-bottom: 5px;">Ref: ${cert.verification_code || cert.certificate_id}</small>
+                                                        ${cert.status === 'issued' ? 
+                                                            `<button class="revoke" data-cert-id="${cert.submission_id || cert._id}" style="background: #dc3545; color: white; font-size: 0.8em; padding: 4px 8px; border: none; border-radius: 3px; cursor: pointer;">Revoke</button>` : 
+                                                            `<span style="color: #28a745; font-size: 0.9em;">✓ ${cert.status}</span>`
                                                         }
                                                     </div>` :
                                                     `<div>
                                                         <span style="color: #28a745;">✓ ${cert.status}</span>
-                                                        ${(cert.status === 'generated' || cert.status === 'issued') ? 
-                                                            `<br><button class="revoke" data-cert-id="${cert.id}" style="background: #dc3545; color: white; font-size: 0.8em; padding: 4px 8px; margin-top: 5px; border: none; border-radius: 3px; cursor: pointer;">Revoke</button>` : ''
+                                                        ${cert.status === 'issued' ? 
+                                                            `<br><button class="revoke" data-cert-id="${cert.submission_id || cert._id}" style="background: #dc3545; color: white; font-size: 0.8em; padding: 4px 8px; margin-top: 5px; border: none; border-radius: 3px; cursor: pointer;">Revoke</button>` : ''
                                                         }
                                                     </div>`
                                             }
@@ -441,33 +438,26 @@
                             </tbody>
                         </table>
                         <div style="margin-top: 15px; color: #666;">
-                            Found ${data.certificates.length} certificate(s)
-                            ${data.total ? ` out of ${data.total} total` : ''}
+                            Found ${data.submissions.length} submission(s)
+                            ${data.pagination ? ` (Page ${data.pagination.page} of ${data.pagination.pages})` : ''}
                         </div>
                     `;
-                } else if (data.certificates && data.certificates.length === 0) {
-                    container.innerHTML = '<div class="loading">No certificates found with current filters</div>';
                 } else {
-                    // Try different response structure
-                    container.innerHTML = `
-                        <div class="error">
-                            Unexpected response format. Raw data: <pre>${JSON.stringify(data, null, 2)}</pre>
-                        </div>
-                    `;
+                    container.innerHTML = '<div class="loading">No submissions found with current filters</div>';
                 }
             } catch (error) {
-                console.error('Error loading certificates:', error);
-                showMessage('Error loading certificates: ' + error.message, 'error');
+                console.error('Error loading submissions:', error);
+                showMessage('Error loading submissions: ' + error.message, 'error');
                 document.getElementById('certificatesContainer').innerHTML = `
                     <div class="error">
-                        <strong>Failed to load certificates</strong><br>
+                        <strong>Failed to load submissions</strong><br>
                         Error: ${error.message}<br>
                         <br>
                         <strong>Troubleshooting:</strong><br>
                         1. Check browser console (F12) for detailed errors<br>
-                        2. Verify API is running at: <a href="${API_BASE}" target="_blank">${API_BASE}</a><br>
+                        2. Verify API is running at: <a href="${API_BASE.replace('/api', '')}" target="_blank">${API_BASE}</a><br>
                         3. Try refreshing the page<br>
-                        4. Check if CORS is properly configured
+                        4. Check if server is running
                     </div>
                 `;
             }
@@ -519,11 +509,11 @@
                 
                 if (response.ok) {
                     let message = `Certificate generated successfully!`;
-                    if (data.certificate_ref_no || data.referenceNumber) {
-                        message += ` Reference: ${data.certificate_ref_no || data.referenceNumber}`;
+                    if (data.verificationCode || data.verification_code) {
+                        message += ` Reference: ${data.verificationCode || data.verification_code}`;
                     }
-                    if (data.verificationUrl) {
-                        message += `<br><a href="${data.verificationUrl}" target="_blank" style="color: #28a745;">View Certificate</a>`;
+                    if (data.verificationUrl || data.verification_url) {
+                        message += `<br><a href="${data.verificationUrl || data.verification_url}" target="_blank" style="color: #28a745;">View Certificate</a>`;
                     }
                     showMessage(message, 'success');
                     loadCertificates();
@@ -578,21 +568,21 @@
             try {
                 showMessage('Revoking certificate...', 'loading');
                 
-                const response = await fetch(`${API_BASE}/certificates/revoke/${id}`, {
-                    method: 'POST',
+                const response = await fetch(`${API_BASE}/admin/submissions/${id}/status`, {
+                    method: 'PATCH',
                     headers: {
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
-                        reason: 'Revoked by administrator',
-                        revokedBy: 'admin'
+                        status: 'revoked',
+                        notes: 'Revoked by administrator'
                     })
                 });
                 
                 const data = await response.json();
                 
                 if (response.ok) {
-                    showMessage(`Certificate revoked successfully! Reference: ${data.certificate_ref_no || 'N/A'}`, 'success');
+                    showMessage(`Certificate revoked successfully!`, 'success');
                     loadCertificates();
                     loadStats();
                 } else {
@@ -614,138 +604,6 @@
                     messageDiv.innerHTML = '';
                 }, 5000);
             }
-        }
-        
-        // Test Google Sheets connectivity
-        async function testGoogleSheets() {
-            showMessage('Testing Google Sheets connectivity...', 'loading');
-            
-            try {
-                const response = await fetch(`${API_BASE}/admin/test-google-sheets`);
-                const data = await response.json();
-                
-                if (data.success) {
-                    showMessage(`✅ Google Sheets working! Data available: ${data.details.dataAvailable ? 'Yes' : 'No'}`, 'success');
-                } else {
-                    let errorMessage = `❌ Google Sheets Error: ${data.message || data.error}`;
-                    
-                    if (data.details && data.details.fallbackMode) {
-                        errorMessage += '<br>🔧 <strong>SOLUTION:</strong> Service account key needs regeneration';
-                        errorMessage += '<br>📝 Go to: <a href="https://console.cloud.google.com/iam-admin/serviceaccounts" target="_blank">Google Cloud Console</a>';
-                        errorMessage += '<br>📧 Service Account: sure-trust@opportune-sylph-458214-b8.iam.gserviceaccount.com';
-                        errorMessage += '<br>📊 Sheet ID: 1zzdRjH24Utl5AWQk6SXOcJ9DnHw4H2hWg3SApHWLUPU';
-                    }
-                    
-                    showMessage(errorMessage, 'error');
-                }
-                
-                console.log('Google Sheets test result:', data);
-                
-            } catch (error) {
-                console.error('Error testing Google Sheets:', error);
-                showMessage('❌ Error testing Google Sheets: ' + error.message, 'error');
-            }
-        }
-
-        // Sync Google Form responses (enhanced version with better error reporting)
-        async function syncGoogleForms() {
-            try {
-                showMessage('🔄 Syncing Google Form responses... (with fallback support)', 'loading');
-                
-                const response = await fetch(`${API_BASE}/admin/sync-current-forms`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    }
-                });
-                
-                const data = await response.json();
-                console.log('Enhanced sync result:', data);
-                
-                if (response.ok && data.success) {
-                    const { summary, syncSource, googleSheetsStatus } = data;
-                    
-                    let message = `✅ Sync completed from ${syncSource}!`;
-                    message += `<br>📊 Added: ${summary.successful}, Already existed: ${summary.alreadyExists}, Failed: ${summary.failed}`;
-                    
-                    if (googleSheetsStatus === 'unavailable') {
-                        message += '<br>⚠️ <strong>Note:</strong> Google Sheets unavailable - used fallback data';
-                        message += '<br>🔧 <strong>Recommendation:</strong> ' + data.recommendation;
-                    }
-                    
-                    showMessage(message, googleSheetsStatus === 'working' ? 'success' : 'error');
-                    
-                    // Refresh data
-                    loadCertificates();
-                    loadStats();
-                } else {
-                    let errorMessage = `❌ Sync failed: ${data.error || data.message}`;
-                    if (data.recommendation) {
-                        errorMessage += '<br>💡 ' + data.recommendation;
-                    }
-                    showMessage(errorMessage, 'error');
-                }
-            } catch (error) {
-                console.error('Error syncing forms:', error);
-                showMessage('❌ Error syncing Google Forms: ' + error.message, 'error');
-            }
-        }
-
-        // Force refresh function to bypass all caches
-        function forceRefresh() {
-            // Clear browser cache for this page
-            if ('caches' in window) {
-                caches.keys().then(function(names) {
-                    names.forEach(function(name) {
-                        caches.delete(name);
-                    });
-                });
-            }
-            
-            // Force reload with cache bypass
-            window.location.reload(true);
-        }
-        
-        // Test API connectivity
-        async function testAPI() {
-            showMessage('Testing API connectivity...', 'loading');
-            
-            const tests = [
-                { name: 'Health Check', url: `${API_BASE.replace('/api', '')}/` },
-                { name: 'Admin Dashboard', url: `${API_BASE}/admin/dashboard` },
-                { name: 'Certificates List', url: `${API_BASE}/certificates` }
-            ];
-            
-            const results = [];
-            
-            for (const test of tests) {
-                try {
-                    console.log(`Testing ${test.name}:`, test.url);
-                    const response = await fetch(test.url);
-                    results.push({
-                        name: test.name,
-                        status: response.status,
-                        ok: response.ok,
-                        statusText: response.statusText
-                    });
-                } catch (error) {
-                    results.push({
-                        name: test.name,
-                        status: 'Error',
-                        ok: false,
-                        statusText: error.message
-                    });
-                }
-            }
-            
-            const resultHTML = results.map(r => 
-                `<div style="margin: 5px 0; color: ${r.ok ? 'green' : 'red'};">
-                    ${r.name}: ${r.status} ${r.statusText}
-                </div>`
-            ).join('');
-            
-            showMessage(`API Test Results:<br>${resultHTML}`, 'success');
-            console.log('API Test Results:', results);
         }
     </script>
 </body>

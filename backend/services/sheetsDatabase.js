@@ -405,7 +405,7 @@ class SheetsDatabase {
       // Update the row
       await this.sheets.spreadsheets.values.update({
         spreadsheetId: sheetId,
-        range: `A${rowNumber}:${String.fromCharCode(65 + headers.length - 1)}${rowNumber}`,
+        range: `A${rowNumber}:ZZ${rowNumber}`, // Use ZZ to cover all columns
         valueInputOption: 'RAW',
         resource: {
           values: [rowData]
