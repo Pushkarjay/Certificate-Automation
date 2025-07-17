@@ -1,0 +1,64 @@
+Certificate Automation System - Git Activity Log
+==================================================
+
+This file contains the full git commit history and file-level changes for the Certificate Automation System project, as of July 17, 2025.
+
+---
+
+[BEGIN GIT LOG]
+
+e7769b7 | 2025-07-17 | Pushkarjay Ajay | fix: add service account key decoding and update backend startup instructions for Render/production
+M	Frontend/admin-dashboard.html
+M	README.md
+A	backend/decode-service-account-and-start.js
+M	backend/services/sheetsDatabase.js
+M	package-lock.json
+M	package.json
+A	scripts/decode-service-account.js
+
+535008b | 2025-07-17 | Pushkarjay Ajay | Updated gitignore
+M	.gitignore
+
+fbedf3d | 2025-07-17 | Pushkarjay Ajay | Improved Dashboard
+M	Frontend/admin-dashboard.html
+M	backend/services/googleAuth.js
+M	backend/services/sheetsDatabase.js
+
+bf19338 | 2025-07-17 | Pushkarjay Ajay | STEP 3 Progress: Configured Google Service Account and Environment
+M	.gitignore
+A	MIGRATION_COMPLETE_SUMMARY.md
+A	backend/API/admin.clean.js
+A	backend/API/certificates.clean.js
+M	backend/services/googleAuth.js
+D	sure-trust-1-1a35a986a881.json
+
+43e179f | 2025-07-17 | Pushkarjay Ajay | STEP 2 Complete: Cleaned up all obsolete SQL database files and references
+A	MIGRATION_PROGRESS.md
+A	PROJECT_STRUCTURE.md
+M	backend/API/admin.js
+M	backend/API/certificate-files.js
+M	backend/API/certificates.js
+M	backend/API/forms.js
+M	backend/API/verify.js
+M	backend/package.json
+M	backend/server.js
+D	backend/services/certificateStorageService.js
+D	backend/services/databaseService.js
+M	backend/services/googleAuth.js
+D	backend/services/googleSheetsService.js
+M	backend/services/productionCertificateGenerator.js
+M	backend/services/simplifiedProductionCertificateGenerator.js
+D	database/MySQL/schema.sql
+D	database/PostgreSQL/add_binary_storage.sql
+D	database/PostgreSQL/form-based-schema.sql
+D	database/PostgreSQL/production-compatibility-migration.sql
+A	scripts/migrate-certificates-to-binary.js
+A	sure-trust-1-1a35a986a881.json
+
+812bfed | 2025-07-16 | Pushkarjay Ajay | STEP 1: Replace SQL Database with Google Sheets - Add new SheetsDatabase service for Google Sheets integration - Update all API endpoints to use Google Sheets instead of SQL - Replace forms.js, certificates.js, verify.js database calls - Update server.js to initialize Sheets Database instead of SQL - Add comprehensive Google Sheets setup documentation - Add test script for validating Google Sheets connection - Support for three separate sheets: trainer, trainee, student - Maintain full API compatibility while using Sheets as backend - Store certificate PDFs as base64 data in sheets - Auto-adjust sheet structure to match required columns
+A	Google/SHEETS_SETUP.md
+A	backend/services/sheetsDatabase.js
+A	scripts/test-sheets-setup.js
+
+...existing git log content continues...
+
