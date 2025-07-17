@@ -1,3 +1,4 @@
+
 const { google } = require('googleapis');
 const { getGoogleCredentials } = require('./googleAuth');
 
@@ -7,6 +8,73 @@ const { getGoogleCredentials } = require('./googleAuth');
  * Supports three separate sheets for Trainers, Trainees (Interns), and Students
  */
 class SheetsDatabase {
+  /**
+   * Map possible response columns to normalized field names
+   */
+  static getFieldMapping() {
+    // Map normalized field names to all possible response column names (case-insensitive)
+    // This covers all three sheet types and all possible Google Form response columns
+    return {
+      timestamp: ['Timestamp', 'timestamp'],
+      full_name: ['FULL NAME', 'Full Name', 'full_name'],
+      email_address: ['Email Address', 'Email address', 'email_address'],
+      title: ['Title', 'title'],
+      phone: ['Phone Number', 'Phone Number ', 'phone'],
+      date_of_birth: ['DATE OF BIRTH', 'Date of Birth', 'date_of_birth'],
+      gender: ['GENDER', 'Gender', 'gender'],
+      course_name: ['Course/Domain', 'Course Name', 'course_name'],
+      batch_initials: ['Batch', 'batch_initials'],
+      gpa: ['GPA', 'gpa'],
+      certificate_type: ['Choose Your Role', 'certificate_type'],
+      batch_name: ['Batch Name', 'batch_name'],
+      course_domain: ['Course Domain', 'course_domain'],
+      status: ['Status', 'status'],
+      certificate_id: ['Certificate ID', 'certificate_id'],
+      certificate_url: ['Certificate URL', 'certificate_url'],
+      verification_code: ['Verification Code', 'verification_code'],
+      issued_date: ['Issued Date', 'issued_date'],
+      qr_code: ['QR Code', 'qr_code'],
+      // Add all other normalized fields and their possible response columns as needed
+    };
+  }
+
+  /**
+   * Normalize a row from Google Sheets to use only normalized field names
+   * @param {object} rowObj - The row object with all columns
+   * @returns {object} Normalized row
+   */
+  static normalizeRow(rowObj) {
+    const mapping = this.getFieldMapping();
+    const normalized = {};
+    // For each normalized field, find the first non-empty value from possible columns (case-insensitive)
+    for (const [norm, possibleCols] of Object.entries(mapping)) {
+      for (const col of possibleCols) {
+        // Case-insensitive match
+        const foundKey = Object.keys(rowObj).find(k => k.trim().toLowerCase() === col.trim().toLowerCase());
+        if (foundKey && rowObj[foundKey] !== undefined && rowObj[foundKey] !== '') {
+          normalized[norm] = rowObj[foundKey];
+          break;
+        }
+      }
+    }
+    // Also copy all normalized fields that are already present
+    for (const key of Object.keys(rowObj)) {
+      if (normalized[key] === undefined && mapping[key]) {
+        normalized[key] = rowObj[key];
+      }
+    }
+    // Add _originalData for debugging
+    normalized._originalData = rowObj;
+    return normalized;
+  }
+
+  // ...existing code...
+  static transformRowData(raw) {
+    // Use normalizeRow for robust normalization
+    const normalized = this.normalizeRow(raw);
+    if (!normalized.status) normalized.status = 'pending';
+    return normalized;
+  }
   constructor() {
     this.sheets = null;
     this.auth = null;
@@ -270,15 +338,19 @@ class SheetsDatabase {
       const headers = rows[0];
       const dataRows = rows.slice(1);
 
-      // Convert rows to objects
+      // Convert rows to objects and normalize fields
       let submissions = dataRows.map((row, index) => {
-        const submission = {};
+        const raw = {};
         headers.forEach((header, colIndex) => {
-          submission[header] = row[colIndex] || '';
+          raw[header] = row[colIndex] || '';
         });
-        submission._rowNumber = index + 2; // +2 because of 0-based index and header row
-        submission._id = `${certificateType}_${submission._rowNumber}`;
-        return submission;
+        raw._rowNumber = index + 2;
+        raw._id = `${certificateType}_${raw._rowNumber}`;
+        // Robust normalization
+        const normalized = this.constructor.transformRowData(raw);
+        normalized._rowNumber = raw._rowNumber;
+        normalized._id = raw._id;
+        return normalized;
       });
 
       // Apply filters
@@ -344,19 +416,20 @@ class SheetsDatabase {
       });
 
       const rowData = rowResponse.data.values ? rowResponse.data.values[0] : [];
-
       if (!rowData || rowData.length === 0) {
         return null;
       }
-
-      // Convert to object
-      const submission = {};
-      headers.forEach((header, index) => {
-        submission[header] = rowData[index] || '';
+      // Convert row to object and normalize
+      const raw = {};
+      headers.forEach((header, colIndex) => {
+        raw[header] = rowData[colIndex] || '';
       });
-      
-      submission._rowNumber = parseInt(rowNumber);
-      submission._id = id;
+      raw._rowNumber = rowNumber;
+      raw._id = id;
+      const normalized = this.constructor.transformRowData(raw);
+      normalized._rowNumber = raw._rowNumber;
+      normalized._id = raw._id;
+      return normalized;
       submission._sheetId = sheetId;
       submission._certificateType = certificateType;
 

@@ -1,3 +1,14 @@
+## Backend Startup with Google Service Account (Render & Local)
+
+To ensure the backend can access Google Sheets, you must decode your base64-encoded service account key before starting the server. Use the following command instead of running `server.js` directly:
+
+```sh
+node Backend/decode-service-account-and-start.js
+```
+
+This script will decode the `GOOGLE_SERVICE_ACCOUNT_KEY` environment variable and write it to `sure-trust-1-1a35a986a881.json` in the project root, then start the backend server. This is required for both local and Render deployments.
+
+If running locally, you may also place the decoded JSON file as `sure-trust-1-1a35a986a881.json` in the project root instead of using the environment variable.
 # 🎓 SURE Trust Certificate Automation System
 
 A comprehensive digital certificate automation system that handles certificate generation, verification, and management through an integrated workflow.
